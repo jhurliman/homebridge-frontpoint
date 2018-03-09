@@ -39,11 +39,11 @@ class FrontPointPlatform {
         noEntryDelay: false,
         silentArming: false
       },
-      "home": {
+      "night": {
         noEntryDelay: false,
         silentArming: true
       },
-      "night": {
+      "stay": {
         noEntryDelay: false,
         silentArming: true
       }
