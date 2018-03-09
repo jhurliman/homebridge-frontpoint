@@ -425,14 +425,18 @@ class FrontPointPlatform {
     switch (value) {
       case Characteristic.SecuritySystemTargetState.STAY_ARM:
         method = frontpoint.armStay
+        opts.noEntryDelay = this.armingModes.stay.noEntryDelay;
+        opts.silentArming = this.armingModes.stay.silentArming;
         break
       case Characteristic.SecuritySystemTargetState.NIGHT_ARM:
         method = frontpoint.armStay
-        opts.noEntryDelay = true
-        opts.silentArming = true
+        opts.noEntryDelay = this.armingModes.night.noEntryDelay;
+        opts.silentArming = this.armingModes.night.silentArming;
         break
       case Characteristic.SecuritySystemTargetState.AWAY_ARM:
         method = frontpoint.armAway
+        opts.noEntryDelay = this.armingModes.away.noEntryDelay;
+        opts.silentArming = this.armingModes.away.silentArming;
         break
       case Characteristic.SecuritySystemTargetState.DISARM:
         method = frontpoint.disarm
