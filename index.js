@@ -33,6 +33,29 @@ class FrontPointPlatform {
     this.accessories = {}
     this.authOpts = { expires: +new Date() - 1 }
 
+    // Default arming mode options
+    this.armingModes = {
+      "away": {
+        noEntryDelay: false,
+        silentArming: false
+      },
+      "home": {
+        noEntryDelay: false,
+        silentArming: true
+      },
+      "night": {
+        noEntryDelay: false,
+        silentArming: true
+      }
+    };
+
+    // Overwrite default arming modes with config settings.
+    if (this.config.armingModes !== undefined) {
+      for(var key in this.config.armingModes) {
+        this.armingModes[key] = this.config.armingModes[key];
+      }
+    }
+
     if (api) {
       this.api = api
       this.api.on('didFinishLaunching', this.didFinishLaunching.bind(this))
