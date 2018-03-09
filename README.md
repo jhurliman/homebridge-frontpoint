@@ -9,7 +9,7 @@ Homebridge plugin for FrontPoint alarm systems.
     "name": "Security System",
     "username": "ENTER YOUR_USERNAME",
     "password": "ENTER YOUR PASSWORD",
-    "armingModes": [
+    "armingModes": {
         "away": {
             "noEntryDelay": false,
             "silentArming": false
@@ -22,6 +22,6 @@ Homebridge plugin for FrontPoint alarm systems.
             "noEntryDelay": false,
             "silentArming": true
         }
-    ]
+    }
 }
 ```
