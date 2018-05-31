@@ -52,7 +52,8 @@ class FrontPointPlatform {
     // Overwrite default arming modes with config settings.
     if (this.config.armingModes !== undefined) {
       for(var key in this.config.armingModes) {
-        this.armingModes[key] = this.config.armingModes[key];
+        this.armingModes[key].noEntryDelay = Boolean(this.config.armingModes[key].noEntryDelay);
+        this.armingModes[key].silentArming = Boolean(this.config.armingModes[key].silentArming);
       }
     }
 
