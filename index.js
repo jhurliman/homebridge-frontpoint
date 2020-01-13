@@ -5,7 +5,7 @@ const PLUGIN_NAME = 'Alarmdotcom'
 const MANUFACTURER = 'Alarm.com'
 const AUTH_TIMEOUT_MINS = 10 // default for session authentication refresh
 const POLL_TIMEOUT_SECS = 60 // default for device state polling
-const LOG_LEVEL = 3  // default for log entries: 0 = NONE, 1 = ERROR, 2 = WARN, 3 = NOTICE, 4 = VERBOSE
+const LOG_LEVEL = 3 // default for log entries: 0 = NONE, 1 = ERROR, 2 = WARN, 3 = NOTICE, 4 = VERBOSE
 
 let Accessory, Service, Characteristic, UUIDGen
 
@@ -35,7 +35,9 @@ class ADCPlatform {
     this.config.pollTimeoutSeconds = this.config.pollTimeoutSeconds || POLL_TIMEOUT_SECS
 
     this.accessories = {}
-    this.authOpts = { expires: +new Date() - 1 }
+    this.authOpts = {
+      expires: +new Date() - 1
+    }
 
     // Default arming mode options
     this.armingModes = {
@@ -68,66 +70,93 @@ class ADCPlatform {
 
   }
 
-  // HomeBridge Method Overrides ///////////////////////////////////////////////
+  // List and Add Devices //////////////////////////////////////////////////////
 
   didFinishLaunching() {
     this.listDevices()
       .then(res => {
-        if (this.config.logLevel > 2)
-          this.log(
-            `Received ${res.partitions.length} partitions(s) and ${
-            res.sensors.length
-            } sensor(s) from Alarm.com`
-          )
-        if (res.lights) {
-          this.log(`Received ${res.lights.length} light(s) from Alarm.com`)
-        }
-        if (res.locks) {
-          this.log(`Received ${res.locks.length} locks(s) from Alarm.com`)
-        }
 
+        // could probably clean this up into a dynamically pop.d loop
 
-        res.partitions.forEach(p => {
-          this.addPartition(p)
+        if (typeof res.partitions[0] != 'undefined') {
           if (this.config.logLevel > 2)
-            this.log(`Added partition ${p.attributes.description} (${p.id})`)
-        })
+            this.log(`Received ${res.partitions.length} partitions(s) from Alarm.com`)
 
-        res.sensors.forEach(s => {
-          // if the sensor id is not in the ignore list in the homebridge config
-          if (!this.ignoredDevices.includes(s.id)) {
-            this.addSensor(s)
+          res.partitions.forEach(p => {
+            this.addPartition(p)
             if (this.config.logLevel > 2)
-              this.log(`Added sensor ${s.attributes.description} (${s.id})`)
-          } else {
-            if (this.config.logLevel > 2)
-              this.log(`Ignored sensor ${s.attributes.description} (${s.id})`)
-          }
-        })
+              this.log(`Added partition ${p.attributes.description} (${p.id})`)
+          })
+        } else {
+          throw new Error('Received no partitions from Alarm.com, listDevices() failed')
+        }
 
-        res.locks.forEach(l => {
-          // check ignore list for lock
-          if (!this.ignoredDevices.includes(l.id)) {
-            this.addLock(l)
-            if (this.config.logLevel > 2)
-              this.log(`Added lock ${l.attributes.description} (${l.id})`)
-          } else {
-            if (this.config.logLevel > 2)
-              this.log(`Ignored lock ${l.attributes.description} (${l.id})`)
-          }
-        })
+        if (typeof res.sensors[0] != 'undefined') {
+          if (this.config.logLevel > 2)
+            this.log(`Received ${res.sensors.length} sensor(s) from Alarm.com`)
 
-        res.lights.forEach(l => {
-          // check ignore list for light
-          if (!this.ignoredDevices.includes(l.id)) {
-            this.addLight(l)
-            if (this.config.logLevel > 2)
-              this.log(`Added light ${l.attributes.description} (${l.id})`)
-          } else {
-            if (this.config.logLevel > 2)
-              this.log(`Ignored light ${l.attributes.description} (${l.id})`)
-          }
-        })
+          res.sensors.forEach(s => {
+            // check for ignored sensor
+            if (!this.ignoredDevices.includes(s.id)) {
+              this.addSensor(s)
+              if (this.config.logLevel > 2)
+                this.log(`Added sensor ${s.attributes.description} (${s.id})`)
+            } else {
+              if (this.config.logLevel > 2)
+                this.log(`Ignored sensor ${s.attributes.description} (${s.id})`)
+            }
+          })
+        } else {
+          if (this.config.logLevel > 3)
+            this.log(`Received no sensors from Alarm.com. If you are expecting
+            sensors in your Alarm.com setup, you may need to check that your 
+            provider has assigned sensors in your Alarm.com account`)
+        }
+
+        if (typeof res.locks[0] != 'undefined') {
+          if (this.config.logLevel > 2)
+            this.log(`Received ${res.locks.length} locks(s) from Alarm.com`)
+
+          res.lights.forEach(l => {
+            // check for ignored light
+            if (!this.ignoredDevices.includes(l.id)) {
+              this.addLight(l)
+              if (this.config.logLevel > 2)
+                this.log(`Added light ${l.attributes.description} (${l.id})`)
+            } else {
+              if (this.config.logLevel > 2)
+                this.log(`Ignored light ${l.attributes.description} (${l.id})`)
+            }
+          })
+        } else {
+          if (this.config.logLevel > 3)
+            this.log(`Received no lights from Alarm.com. If you are expecting
+            lights in your Alarm.com setup, you may need to check that your 
+            provider has assigned lights in your Alarm.com account`)
+        }
+
+        if (typeof res.lights[0] != 'undefined') {
+          if (this.config.logLevel > 2)
+            this.log(`Received ${res.lights.length} light(s) from Alarm.com`)
+
+          res.locks.forEach(l => {
+            // check for ignored lock
+            if (!this.ignoredDevices.includes(l.id)) {
+              this.addLock(l)
+              if (this.config.logLevel > 2)
+                this.log(`Added lock ${l.attributes.description} (${l.id})`)
+            } else {
+              if (this.config.logLevel > 2)
+                this.log(`Ignored lock ${l.attributes.description} (${l.id})`)
+            }
+          })
+        } else {
+          if (this.config.logLevel > 3)
+            this.log(`Received no locks from Alarm.com. If you are expecting
+            locks in your Alarm.com setup, you may need to check that your 
+            provider has assigned locks in your Alarm.com account`)
+        }
+
       })
       .catch(err => {
         if (this.config.logLevel > 0)
@@ -142,6 +171,7 @@ class ADCPlatform {
   }
 
   configureAccessory(accessory) {
+
     if (this.config.logLevel > 2)
       this.log(`Loaded from cache: ${accessory.context.name} (${accessory.context.accID})`)
 
@@ -197,8 +227,12 @@ class ADCPlatform {
             out.lights = out.lights.concat(system.lights)
             out.locks = out.locks.concat(system.locks)
             return out
-          },
-          { partitions: [], sensors: [], lights: [], locks: [] }
+          }, {
+            partitions: [],
+            sensors: [],
+            lights: [],
+            locks: []
+          }
         )
       })
   }
@@ -207,30 +241,51 @@ class ADCPlatform {
     this.login()
       .then(res => fetchStateForAllSystems(res))
       .then(systemStates => {
+
         systemStates.forEach(system => {
-          system.partitions.forEach(partition => {
-            const accessory = this.accessories[partition.id]
-            if (!accessory)
-              return this.addPartition(partition)
 
-            this.setPartitionState(accessory, partition)
-          })
+          if (system.partitions) {
+            system.partitions.forEach(partition => {
+              const accessory = this.accessories[partition.id]
+              if (!accessory)
+                return this.addPartition(partition)
+              this.setPartitionState(accessory, partition)
+            })
+          } else {
+            throw new Error('Alarm.com: No partitions found, check configuration with security system provider')
+          }
+          // fatal error, need to catch and report in general log output
 
-          system.sensors.forEach(sensor => {
-            const accessory = this.accessories[sensor.id]
-            if (!accessory)
-              return this.addSensor(sensor)
+          if (system.sensors) {
+            system.sensors.forEach(sensor => {
+              const accessory = this.accessories[sensor.id]
+              if (!accessory)
+                return this.addSensor(sensor)
+              this.setSensorState(accessory, sensor)
+            })
+          }
+          // need to catch and report in loglevel debug
 
-            this.setSensorState(accessory, sensor)
-          })
+          if (system.locks) {
+            system.locks.forEach(lock => {
+              const accessory = this.accessories[lock.id]
+              if (!accessory)
+                return this.addLock(lock)
+              this.setLockState(accessory, lock)
+            })
+          }
+          // need to catch and report in loglevel debug
 
-          system.locks.forEach(lock => {
-            const accessory = this.accessories[lock.id]
-            if (!accessory)
-              return this.addLock(lock)
+          if (system.light) {
+            system.light.forEach(light => {
+              const accessory = this.accessories[light.id]
+              if (!accessory)
+                return this.addLight(lock)
+              this.setLightState(accessory, light)
+            })
+          }
+          // need to catch and report in loglevel debug
 
-            this.setLockState(accessory, lock)
-          })
         })
       })
       .catch(err => this.log(err))
@@ -523,6 +578,146 @@ class ADCPlatform {
     }
   }
 
+  // Light Methods /////////////////////////////////////////////////////////
+
+  addLight(light) {
+    const id = light.id
+    let accessory = this.accessories[id]
+    // in an ideal world, homebridge shouldn't be restarted too often
+    // so upon starting we clean out the cache of alarm accessories
+    if (accessory)
+      this.removeAccessory(accessory)
+
+    const [type, model] = [
+      Service.Lightbulb,
+      'Light'
+    ]
+
+    const name = light.attributes.description
+    const uuid = UUIDGen.generate(id)
+    accessory = new Accessory(name, uuid)
+
+    accessory.context = {
+      accID: id,
+      name: name,
+      state: light.attributes.state,
+      desiredState: light.attributes.desiredState,
+      isDimmer: light.attributes.isDimmer,
+      lightLevel: light.attributes.lightLevel,
+      lightType: model
+    }
+
+    // if the light id is not in the ignore list in the homebridge config
+    if (!this.ignoredDevices.includes(id)) {
+      if (this.config.logLevel > 2)
+        this.log(`Adding ${model} "${name}" (id=${id}, uuid=${uuid}) (${accessory.context.state} ${accessory.context.desiredState})`)
+
+      this.addAccessory(accessory, type, model)
+      this.setupLight(accessory)
+
+      // Set the initial light state
+      this.setLightState(accessory, light)
+    }
+  }
+
+  setupLight(accessory) {
+    const id = accessory.context.accID
+    const name = accessory.context.name
+    const model = accessory.context.lightType
+    const type = Service.Lightbulb
+
+    // Always reachable
+    accessory.reachable = true
+
+    // Setup HomeKit accessory information
+    accessory
+      .getService(Service.AccessoryInformation)
+      .setCharacteristic(Characteristic.Manufacturer, MANUFACTURER)
+      .setCharacteristic(Characteristic.Model, model)
+      .setCharacteristic(Characteristic.SerialNumber, id)
+
+    // Setup event listeners
+
+    accessory.on('identify', (paired, callback) => {
+      if (this.config.logLevel > 2)
+        this.log(`${name} identify requested, paired=${paired}`)
+
+      callback()
+    })
+
+    const service = accessory.getService(type)
+
+    service
+      .getCharacteristic(Characteristic.On)
+      .on('get', callback => {
+        callback(null, accessory.context.state)
+      })
+      .on('set', (value, callback) => this.changeLightState(accessory, value, accessory.context.lightLevel, callback))
+
+    if (accessory.context.isDimmer) {
+      service
+        .getCharacteristic(Characteristic.Brightness)
+        .on('get', callback => callback(null, accessory.context.lightLevel))
+        .on('set', (value, callback) => this.changeLightState(accessory, accessory.context.state, value, callback))
+    }
+  }
+
+  setLightState(accessory, light) {
+    const id = accessory.context.accID
+    const name = accessory.context.name
+    const state = getLightState(light.attributes.state)
+    const brightness = light.attributes.lightLevel
+
+    if (state !== accessory.context.state) {
+      if (this.config.logLevel > 2)
+        this.log(`Updating light ${name} (${id}), state=${state}, prev=${accessory.context.state}`)
+
+      accessory.context.state = state
+      accessory
+        .getService(Service.Lightbulb)
+        .getCharacteristic(Characteristic.On)
+        .updateValue(state)
+    }
+
+    if (accessory.context.isDimmer && brightness !== accessory.context.brightness) {
+      accessory.context.brightness = brightness
+      accessory
+        .getService(Service.Lightbulb)
+        .getCharacteristic(Characteristic.Brightness)
+        .updateValue(brightness)
+    }
+  }
+
+  changeLightState(accessory, value, brightness, callback) {
+    const id = accessory.context.accID
+    let method
+
+    if (value) {
+      method = nodeADC.turnOnLight
+    } else {
+      method = nodeADC.turnOffLight
+    }
+
+    if (this.config.logLevel > 2)
+      this.log(`Changing light (${accessory.context.accID}, ${value} light level ${brightness})`)
+
+    accessory.context.state = value
+    accessory.context.lightLevel = brightness
+
+    this.login()
+      .then(res => method(id, brightness, res)) // Usually 20-30 seconds
+      .then(res => res.data)
+      .then(light => {
+        this.setLightState(accessory, light)
+      })
+      .then(callback())
+      .catch(err => {
+        this.log(`Error: Failed to change light state: ${err.stack}`)
+        this.refreshDevices()
+        callback(err)
+      })
+  }
+
   // Lock Methods /////////////////////////////////////////////////////////
 
   addLock(lock) {
@@ -597,7 +792,9 @@ class ADCPlatform {
 
     service
       .getCharacteristic(Characteristic.LockCurrentState)
-      .on('get', callback => { callback(null, accessory.context.state) })
+      .on('get', callback => {
+        callback(null, accessory.context.state)
+      })
 
     service
       .getCharacteristic(Characteristic.LockTargetState)
@@ -664,144 +861,6 @@ class ADCPlatform {
       .then(_ => callback())
       .catch(err => {
         this.log(`Error: Failed to change lock state: ${err.stack}`)
-        this.refreshDevices()
-        callback(err)
-      })
-  }
-
-  // Light Methods /////////////////////////////////////////////////////////
-
-  addLight(light) {
-    const id = light.id
-    let accessory = this.accessories[id]
-    // in an ideal world, homebridge shouldn't be restarted too often
-    // so upon starting we clean out the cache of alarm accessories
-    if (accessory)
-      this.removeAccessory(accessory)
-
-    const [type, model] = [
-      Service.Lightbulb,
-      'Light'
-    ]
-
-    const name = light.attributes.description
-    const uuid = UUIDGen.generate(id)
-    accessory = new Accessory(name, uuid)
-
-    accessory.context = {
-      accID: id,
-      name: name,
-      state: light.attributes.state,
-      desiredState: light.attributes.desiredState,
-      isDimmer: light.attributes.isDimmer,
-      lightLevel: light.attributes.lightLevel,
-      lightType: model
-    }
-
-    // if the light id is not in the ignore list in the homebridge config
-    if (!this.ignoredDevices.includes(id)) {
-      if (this.config.logLevel > 2)
-        this.log(`Adding ${model} "${name}" (id=${id}, uuid=${uuid}) (${accessory.context.state} ${accessory.context.desiredState})`)
-
-      this.addAccessory(accessory, type, model)
-      this.setupLight(accessory)
-
-      // Set the initial light state
-      this.setLightState(accessory, light)
-    }
-  }
-
-  setupLight(accessory) {
-    const id = accessory.context.accID
-    const name = accessory.context.name
-    const model = accessory.context.lightType
-    const type = Service.Lightbulb
-
-    // Always reachable
-    accessory.reachable = true
-
-    // Setup HomeKit accessory information
-    accessory
-      .getService(Service.AccessoryInformation)
-      .setCharacteristic(Characteristic.Manufacturer, MANUFACTURER)
-      .setCharacteristic(Characteristic.Model, model)
-      .setCharacteristic(Characteristic.SerialNumber, id)
-
-    // Setup event listeners
-
-    accessory.on('identify', (paired, callback) => {
-      if (this.config.logLevel > 2)
-        this.log(`${name} identify requested, paired=${paired}`)
-
-      callback()
-    })
-
-    const service = accessory.getService(type)
-
-    service
-      .getCharacteristic(Characteristic.On)
-      .on('get', callback => { callback(null, accessory.context.state) })
-      .on('set', (value, callback) => this.changeLightState(accessory, value, accessory.context.lightLevel, callback))
-
-    if (accessory.context.isDimmer) {
-        service
-          .getCharacteristic(Characteristic.Brightness)
-          .on('get', callback => callback(null, accessory.context.lightLevel))
-          .on('set', (value, callback) => this.changeLightState(accessory, accessory.context.state, value, callback))
-      }
-    }
-
-  setLightState(accessory, light) {
-    const id = accessory.context.accID
-    const name = accessory.context.name
-    const state = getLightState(light.attributes.state)
-    const brightness = light.attributes.lightLevel
-
-    if (state !== accessory.context.state) {
-      if (this.config.logLevel > 2)
-        this.log(`Updating light ${name} (${id}), state=${state}, prev=${accessory.context.state}`)
-
-      accessory.context.state = state
-      accessory
-        .getService(Service.Lightbulb)
-        .getCharacteristic(Characteristic.On)
-        .updateValue(state)
-    }
-
-    if (accessory.context.isDimmer && brightness !== accessory.context.brightness) {
-      accessory.context.brightness = brightness
-      accessory
-        .getService(Service.Lightbulb)
-        .getCharacteristic(Characteristic.Brightness)
-        .updateValue(brightness)
-    }
-  }
-
-  changeLightState(accessory, value, brightness, callback) {
-    const id = accessory.context.accID
-    let method
-
-    if (value) {
-      method = nodeADC.turnOnLight
-    } else {
-      method = nodeADC.turnOffLight
-    }
-
-    if (this.config.logLevel > 2)
-      this.log(`Changing light (${accessory.context.accID}, ${value} light level ${brightness})`)
-
-    accessory.context.state = value
-    accessory.context.lightLevel = brightness
-
-    this.login()
-      .then(res => method(id, brightness, res)) // Usually 20-30 seconds
-      .then(res => res.data)
-      .then(light => {
-        this.setLightState(accessory, light)
-      })
-      .then(callback())
-      .catch(err => {
-        this.log(`Error: Failed to change light state: ${err.stack}`)
         this.refreshDevices()
         callback(err)
       })
