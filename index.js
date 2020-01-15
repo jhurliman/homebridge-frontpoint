@@ -171,6 +171,7 @@ class ADCPlatform {
   }
 
   configureAccessory(accessory) {
+    // This calls the configureAccessory in homebridge core
 
     if (this.config.logLevel > 2)
       this.log(`Loaded from cache: ${accessory.context.name} (${accessory.context.accID})`)
@@ -693,9 +694,9 @@ class ADCPlatform {
     let method
 
     if (value) {
-      method = nodeADC.turnOnLight
+      method = nodeADC.setLightOn
     } else {
-      method = nodeADC.turnOffLight
+      method = nodeADC.setLightOff
     }
 
     if (this.config.logLevel > 2)
@@ -835,10 +836,10 @@ class ADCPlatform {
 
     switch (value) {
       case Characteristic.LockTargetState.UNSECURED:
-        method = nodeADC.unsecureLock
+        method = nodeADC.setLockUnsecure
         break
       case Characteristic.LockTargetState.SECURED:
-        method = nodeADC.secureLock
+        method = nodeADC.setLockSecure
         break
       default:
         const msg = `Can't set LockMechanism to unknown value ${value}`
