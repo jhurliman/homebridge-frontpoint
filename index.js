@@ -76,85 +76,42 @@ class ADCPlatform {
     this.listDevices()
       .then(res => {
 
-        // could probably clean this up into a dynamically pop.d loop
-
-        if (typeof res.partitions[0] != 'undefined') {
-          if (this.config.logLevel > 2)
-            this.log(`Received ${res.partitions.length} partitions(s) from Alarm.com`)
-
-          res.partitions.forEach(p => {
-            this.addPartition(p)
+        for (var device in res) {
+          if (device === 'partitions' && typeof res[device][0] == 'undefined') {
+            // throw error if no partition, ideally this should never occur
+            throw new Error(`Received no partitions from Alarm.com`)
+          } else if (res[device].length > 0) {
             if (this.config.logLevel > 2)
-              this.log(`Added partition ${p.attributes.description} (${p.id})`)
-          })
-        } else {
-          throw new Error('Received no partitions from Alarm.com, listDevices() failed')
-        }
+              this.log(`Received ${res[device].length} ${device} from Alarm.com`)
 
-        if (typeof res.sensors[0] != 'undefined') {
-          if (this.config.logLevel > 2)
-            this.log(`Received ${res.sensors.length} sensor(s) from Alarm.com`)
+            res[device].forEach(d => {
+              var deviceType = d.type
+              var realDeviceType = deviceType.split('/')[1]
 
-          res.sensors.forEach(s => {
-            // check for ignored sensor
-            if (!this.ignoredDevices.includes(s.id)) {
-              this.addSensor(s)
-              if (this.config.logLevel > 2)
-                this.log(`Added sensor ${s.attributes.description} (${s.id})`)
-            } else {
-              if (this.config.logLevel > 2)
-                this.log(`Ignored sensor ${s.attributes.description} (${s.id})`)
-            }
-          })
-        } else {
-          if (this.config.logLevel > 3)
-            this.log(`Received no sensors from Alarm.com. If you are expecting
-            sensors in your Alarm.com setup, you may need to check that your 
-            provider has assigned sensors in your Alarm.com account`)
-        }
+              if (!this.ignoredDevices.includes(d.id)) {
+                if (realDeviceType == 'partition')
+                  this.addPartition(d)
+                else if (realDeviceType == 'sensor')
+                  this.addSensor(d)
+                else if (realDeviceType == 'light')
+                  this.addLight(d)
+                else if (realDeviceType == 'lock')
+                  this.addLock(d)
+                // add more devices here as available, ie. garage doors, etc
 
-        if (typeof res.locks[0] != 'undefined') {
-          if (this.config.logLevel > 2)
-            this.log(`Received ${res.locks.length} locks(s) from Alarm.com`)
-
-          res.lights.forEach(l => {
-            // check for ignored light
-            if (!this.ignoredDevices.includes(l.id)) {
-              this.addLight(l)
-              if (this.config.logLevel > 2)
-                this.log(`Added light ${l.attributes.description} (${l.id})`)
-            } else {
-              if (this.config.logLevel > 2)
-                this.log(`Ignored light ${l.attributes.description} (${l.id})`)
-            }
-          })
-        } else {
-          if (this.config.logLevel > 3)
-            this.log(`Received no lights from Alarm.com. If you are expecting
-            lights in your Alarm.com setup, you may need to check that your 
-            provider has assigned lights in your Alarm.com account`)
-        }
-
-        if (typeof res.lights[0] != 'undefined') {
-          if (this.config.logLevel > 2)
-            this.log(`Received ${res.lights.length} light(s) from Alarm.com`)
-
-          res.locks.forEach(l => {
-            // check for ignored lock
-            if (!this.ignoredDevices.includes(l.id)) {
-              this.addLock(l)
-              if (this.config.logLevel > 2)
-                this.log(`Added lock ${l.attributes.description} (${l.id})`)
-            } else {
-              if (this.config.logLevel > 2)
-                this.log(`Ignored lock ${l.attributes.description} (${l.id})`)
-            }
-          })
-        } else {
-          if (this.config.logLevel > 3)
-            this.log(`Received no locks from Alarm.com. If you are expecting
-            locks in your Alarm.com setup, you may need to check that your 
-            provider has assigned locks in your Alarm.com account`)
+                if (this.config.logLevel > 2)
+                  this.log(`Added ${realDeviceType} ${d.attributes.description} (${d.id})`)
+              } else {
+                if (this.config.logLevel > 2)
+                  this.log(`Ignored sensor ${d.attributes.description} (${d.id})`)
+              }
+            })
+          } else {
+            if (this.config.logLevel > 3)
+              this.log(`Received no ${device} from Alarm.com. If you are expecting
+              ${device} in your Alarm.com setup, you may need to check that your 
+              provider has assigned ${device} in your Alarm.com account`)
+          }
         }
 
       })
