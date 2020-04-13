@@ -663,7 +663,7 @@ class ADCPlatform {
     accessory.context.lightLevel = brightness
 
     this.login()
-      .then(res => method(id, brightness, res)) // Usually 20-30 seconds
+      .then(res => method(id, res, brightness)) // Usually 20-30 seconds
       .then(res => res.data)
       .then(light => {
         this.setLightState(accessory, light)
