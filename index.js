@@ -239,7 +239,7 @@ class ADCPlatform {
               const accessory = this.accessories[light.id]
               if (!accessory)
                 return this.addLight(lock)
-              this.setLightState(accessory, light)
+              this.setLocalLightState(accessory, light)
             })
           }
           // need to catch and report in loglevel debug
@@ -574,7 +574,7 @@ class ADCPlatform {
       this.setupLight(accessory)
 
       // Set the initial light state
-      this.setLightState(accessory, light)
+      this.setLocalLightState(accessory, light)
     }
   }
 
@@ -610,17 +610,17 @@ class ADCPlatform {
       .on('get', callback => {
         callback(null, accessory.context.state)
       })
-      .on('set', (value, callback) => this.changeLightState(accessory, value, accessory.context.lightLevel, callback))
+      .on('set', (value, callback) => this.changeLightState(accessory, value, accessory.context.state, callback))
 
     if (accessory.context.isDimmer) {
       service
         .getCharacteristic(Characteristic.Brightness)
         .on('get', callback => callback(null, accessory.context.lightLevel))
-        .on('set', (value, callback) => this.changeLightState(accessory, accessory.context.state, value, callback))
+        .on('set', (value, callback) => this.changeLightState(accessory, value, accessory.context.lightLevel, callback))
     }
   }
 
-  setLightState(accessory, light) {
+  setLocalLightState(accessory, light) {
     const id = accessory.context.accID
     const name = accessory.context.name
     const state = getLightState(light.attributes.state)
@@ -663,14 +663,14 @@ class ADCPlatform {
     accessory.context.lightLevel = brightness
 
     this.login()
-      .then(res => method(id, brightness, res)) // Usually 20-30 seconds
+      .then(res => method(id, res, brightness)) // Usually 20-30 seconds
       .then(res => res.data)
       .then(light => {
-        this.setLightState(accessory, light)
+        this.setLocalLightState(accessory, light)
       })
       .then(callback())
       .catch(err => {
-        this.log(`Error: Failed to change light state: ${err.stack}`)
+        this.log(`Error: Failed to change light state:\n ${err.stack}`)
         this.refreshDevices()
         callback(err)
       })
