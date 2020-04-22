@@ -538,6 +538,10 @@ class ADCPlatform {
 
   // Light Methods /////////////////////////////////////////////////////////
 
+  /**
+   * Adds necessary parameters to a light for homebridge before passing it to further setup methods
+   * @param {Object} light
+   */
   addLight(light) {
     const id = light.id
     let accessory = this.accessories[id]
@@ -578,6 +582,10 @@ class ADCPlatform {
     }
   }
 
+  /**
+   * Adds a light to homebridge, including exposing it's capabilities and state
+   * @param accessory
+   */
   setupLight(accessory) {
     const id = accessory.context.accID
     const name = accessory.context.name
@@ -620,6 +628,11 @@ class ADCPlatform {
     }
   }
 
+  /**
+   * Syncs the state of an accessory (local light) and light (Alarm.com light)
+   * @param accessory The accessory representing a light
+   * @param light The light parameters from Alarm.com
+   */
   setLocalLightState(accessory, light) {
     const id = accessory.context.accID
     const name = accessory.context.name
@@ -646,6 +659,13 @@ class ADCPlatform {
     }
   }
 
+  /**
+   * Change the physical state of a light using the Alarm.com API
+   * @param accessory The light to be changed
+   * @param {boolean} value Value indicating whether the light should be turned on or off
+   * @param {number} brightness The brightness of a light, from 0-100. Only works with dimmers
+   * @param callback
+   */
   changeLightState(accessory, value, brightness, callback) {
     const id = accessory.context.accID
     let method
@@ -854,10 +874,20 @@ class ADCPlatform {
 
 }
 
+/**
+ * Fetches all relationships for a system from Alarm.com
+ * @param res Response object from login()
+ * @returns {Promise<[(number | bigint), number, number, number, number, number, number, number, number, number]>} See systemState.ts for return type
+ */
 function fetchStateForAllSystems(res) {
   return Promise.all(res.systems.map(id => nodeADC.getCurrentState(id, res)))
 }
 
+/**
+ * Maps an Alarm.com partition state to its nodeADC counterpart
+ * @param state The state as defined by Alarm.com
+ * @returns {number|*} The state as nodeADC defines it
+ */
 function getPartitionState(state) {
   switch (state) {
     case nodeADC.SYSTEM_STATES.ARMED_STAY:
@@ -873,6 +903,11 @@ function getPartitionState(state) {
   }
 }
 
+/**
+ * Maps an Alarm.com lock state to its nodeADC counterpart
+ * @param state The state as defined by Alarm.com
+ * @returns {number|*} The state as nodeADC defines it
+ */
 function getLockState(state) {
   switch (state) {
     case nodeADC.LOCK_STATES.UNSECURED:
@@ -884,6 +919,11 @@ function getLockState(state) {
   }
 }
 
+/**
+ * Maps an Alarm.com light state to its nodeADC counterpart
+ * @param state The state as defined by Alarm.com
+ * @returns {number|*} The state as nodeADC defines it
+ */
 function getLightState(state) {
   switch (state) {
     case nodeADC.LIGHT_STATES.OFF:
@@ -895,6 +935,11 @@ function getLightState(state) {
   }
 }
 
+/**
+ * Maps an Alarm.com sensor state to its nodeADC counterpart
+ * @param sensor The state as defined by Alarm.com
+ * @returns {number|*} The state as nodeADC defines it
+ */
 function getSensorState(sensor) {
   // if (sensor.attributes.description == 'Master Motion')
   // console.log(sensor)
