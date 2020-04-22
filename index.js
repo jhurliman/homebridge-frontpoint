@@ -1,55 +1,57 @@
-const nodeADC = require('node-alarm-dot-com')
+const nodeADC = require('node-alarm-dot-com');
 
-const PLUGIN_ID = 'homebridge-node-alarm-dot-com'
-const PLUGIN_NAME = 'Alarmdotcom'
-const MANUFACTURER = 'Alarm.com'
-const AUTH_TIMEOUT_MINS = 10 // default for session authentication refresh
-const POLL_TIMEOUT_SECS = 60 // default for device state polling
-const LOG_LEVEL = 3 // default for log entries: 0 = NONE, 1 = ERROR, 2 = WARN, 3 = NOTICE, 4 = VERBOSE
+const PLUGIN_ID = 'homebridge-node-alarm-dot-com';
+const PLUGIN_NAME = 'Alarmdotcom';
+const MANUFACTURER = 'Alarm.com';
+const AUTH_TIMEOUT_MINS = 10; // default for session authentication refresh
+const POLL_TIMEOUT_SECS = 60; // default for device state polling
+const LOG_LEVEL = 3; // default for log entries: 0 = NONE, 1 = ERROR, 2 = WARN, 3 = NOTICE, 4 = VERBOSE
 
-let Accessory, Service, Characteristic, UUIDGen
+let Accessory, Service, Characteristic, UUIDGen;
 
 module.exports = function (homebridge) {
-  Accessory = homebridge.platformAccessory
-  Service = homebridge.hap.Service
-  Characteristic = homebridge.hap.Characteristic
-  UUIDGen = homebridge.hap.uuid
+  Accessory = homebridge.platformAccessory;
+  Service = homebridge.hap.Service;
+  Characteristic = homebridge.hap.Characteristic;
+  UUIDGen = homebridge.hap.uuid;
 
-  homebridge.registerPlatform(PLUGIN_ID, PLUGIN_NAME, ADCPlatform, true)
-}
+  homebridge.registerPlatform(PLUGIN_ID, PLUGIN_NAME, ADCPlatform, true);
+};
 
 class ADCPlatform {
   constructor(log, config, api) {
-    this.log = log
-    this.config = config || { platform: PLUGIN_NAME }
-    this.debug = this.config.debug || false
-    this.config.logLevel = this.config.logLevel || LOG_LEVEL
-    this.ignoredDevices = this.config.ignoredDevices || []
+    this.log = log;
+    this.config = config || {platform: PLUGIN_NAME};
+    this.debug = this.config.debug || false;
+    this.config.logLevel = this.config.logLevel || LOG_LEVEL;
+    this.ignoredDevices = this.config.ignoredDevices || [];
 
-    if (!this.config.username)
-      throw new Error('Alarm.com: Missing required username in config')
-    if (!this.config.password)
-      throw new Error('Alarm.com: Missing required password in config')
+    if (!this.config.username) {
+      throw new Error('Alarm.com: Missing required username in config');
+    }
+    if (!this.config.password) {
+      throw new Error('Alarm.com: Missing required password in config');
+    }
 
-    this.config.authTimeoutMinutes = this.config.authTimeoutMinutes || AUTH_TIMEOUT_MINS
-    this.config.pollTimeoutSeconds = this.config.pollTimeoutSeconds || POLL_TIMEOUT_SECS
+    this.config.authTimeoutMinutes = this.config.authTimeoutMinutes || AUTH_TIMEOUT_MINS;
+    this.config.pollTimeoutSeconds = this.config.pollTimeoutSeconds || POLL_TIMEOUT_SECS;
 
-    this.accessories = {}
+    this.accessories = {};
     this.authOpts = {
       expires: +new Date() - 1
-    }
+    };
 
     // Default arming mode options
     this.armingModes = {
-      "away": {
+      'away': {
         noEntryDelay: false,
         silentArming: false
       },
-      "night": {
+      'night': {
         noEntryDelay: false,
         silentArming: true
       },
-      "stay": {
+      'stay': {
         noEntryDelay: false,
         silentArming: true
       }
@@ -64,8 +66,8 @@ class ADCPlatform {
     }
 
     if (api) {
-      this.api = api
-      this.api.on('didFinishLaunching', this.didFinishLaunching.bind(this))
+      this.api = api;
+      this.api.on('didFinishLaunching', this.didFinishLaunching.bind(this));
     }
 
   }
@@ -79,99 +81,111 @@ class ADCPlatform {
         for (var device in res) {
           if (device === 'partitions' && typeof res[device][0] == 'undefined') {
             // throw error if no partition, ideally this should never occur
-            throw new Error(`Received no partitions from Alarm.com`)
+            throw new Error(`Received no partitions from Alarm.com`);
           } else if (res[device].length > 0) {
-            if (this.config.logLevel > 2)
-              this.log(`Received ${res[device].length} ${device} from Alarm.com`)
+            if (this.config.logLevel > 2) {
+              this.log(`Received ${res[device].length} ${device} from Alarm.com`);
+            }
 
             res[device].forEach(d => {
-              var deviceType = d.type
-              var realDeviceType = deviceType.split('/')[1]
+              var deviceType = d.type;
+              var realDeviceType = deviceType.split('/')[1];
 
               if (!this.ignoredDevices.includes(d.id)) {
-                if (realDeviceType == 'partition')
-                  this.addPartition(d)
-                else if (realDeviceType == 'sensor')
-                  this.addSensor(d)
-                else if (realDeviceType == 'light')
-                  this.addLight(d)
-                else if (realDeviceType == 'lock')
-                  this.addLock(d)
+                if (realDeviceType === 'partition') {
+                  this.addPartition(d);
+                } else if (realDeviceType === 'sensor') {
+                  this.addSensor(d);
+                } else if (realDeviceType === 'light') {
+                  this.addLight(d);
+                } else if (realDeviceType === 'lock') {
+                  this.addLock(d);
+                }
                 // add more devices here as available, ie. garage doors, etc
 
-                if (this.config.logLevel > 2)
-                  this.log(`Added ${realDeviceType} ${d.attributes.description} (${d.id})`)
+                if (this.config.logLevel > 2) {
+                  this.log(`Added ${realDeviceType} ${d.attributes.description} (${d.id})`);
+                }
               } else {
-                if (this.config.logLevel > 2)
-                  this.log(`Ignored sensor ${d.attributes.description} (${d.id})`)
+                if (this.config.logLevel > 2) {
+                  this.log(`Ignored sensor ${d.attributes.description} (${d.id})`);
+                }
               }
-            })
+            });
           } else {
-            if (this.config.logLevel > 3)
+            if (this.config.logLevel > 3) {
               this.log(`Received no ${device} from Alarm.com. If you are expecting
-              ${device} in your Alarm.com setup, you may need to check that your 
-              provider has assigned ${device} in your Alarm.com account`)
+              ${device} in your Alarm.com setup, you may need to check that your
+              provider has assigned ${device} in your Alarm.com account`);
+            }
           }
         }
 
       })
       .catch(err => {
-        if (this.config.logLevel > 0)
-          this.log(`UNHANDLED ERROR: ${err.stack}`)
-      })
+        if (this.config.logLevel > 0) {
+          this.log(`UNHANDLED ERROR: ${err.stack}`);
+        }
+      });
 
     // Start a timer to periodically refresh status
     this.timerID = setInterval(
       () => this.refreshDevices(),
       this.config.pollTimeoutSeconds * 1000
-    )
+    );
   }
 
   configureAccessory(accessory) {
     // This calls the configureAccessory in homebridge core
 
-    if (this.config.logLevel > 2)
-      this.log(`Loaded from cache: ${accessory.context.name} (${accessory.context.accID})`)
-
-    const existing = this.accessories[accessory.context.accID]
-    if (existing)
-      this.removeAccessory(existing)
-
-    if (accessory.context.partitionType) {
-      this.setupPartition(accessory)
-    } else if (accessory.context.sensorType) {
-      this.setupSensor(accessory)
-    } else {
-      if (this.config.logLevel > 1)
-        this.log(`Unrecognized accessory ${accessory.context.accID}`)
+    if (this.config.logLevel > 2) {
+      this.log(`Loaded from cache: ${accessory.context.name} (${accessory.context.accID})`);
     }
 
-    this.accessories[accessory.context.accID] = accessory
+    const existing = this.accessories[accessory.context.accID];
+    if (existing) {
+      this.removeAccessory(existing);
+    }
+
+    if (accessory.context.partitionType) {
+      this.setupPartition(accessory);
+    } else if (accessory.context.sensorType) {
+      this.setupSensor(accessory);
+    } else {
+      if (this.config.logLevel > 1) {
+        this.log(`Unrecognized accessory ${accessory.context.accID}`);
+      }
+    }
+
+    this.accessories[accessory.context.accID] = accessory;
   }
 
   // Internal Methods //////////////////////////////////////////////////////////
 
   login() {
     // Cache expiration check
-    const now = +new Date()
-    if (this.authOpts.expires > now)
-      return Promise.resolve(this.authOpts)
+    const now = +new Date();
+    if (this.authOpts.expires > now) {
+      return Promise.resolve(this.authOpts);
+    }
 
-    if (this.config.logLevel > 2)
-      this.log(`Logging into Alarm.com as ${this.config.username}`)
+    if (this.config.logLevel > 2) {
+      this.log(`Logging into Alarm.com as ${this.config.username}`);
+    }
 
     return nodeADC
       .login(this.config.username, this.config.password)
       .then(authOpts => {
         // Cache login response and estimated expiration time
-        authOpts.expires = +new Date() + 1000 * 60 * this.config.authTimeoutMinutes
-        this.authOpts = authOpts
+        authOpts.expires = +new Date() + 1000 * 60 * this.config.authTimeoutMinutes;
+        this.authOpts = authOpts;
 
-        if (this.config.logLevel > 2)
-          this.log(`Logged into Alarm.com as ${this.config.username}`)
+        if (this.config.logLevel > 2) {
+          this.log(`Logged into Alarm.com as ${this.config.username}`);
+        }
 
-        return authOpts
-      })
+        return authOpts;
+      });
   }
 
   listDevices() {
@@ -180,19 +194,19 @@ class ADCPlatform {
       .then(systemStates => {
         return systemStates.reduce(
           (out, system) => {
-            out.partitions = out.partitions.concat(system.partitions)
-            out.sensors = out.sensors.concat(system.sensors)
-            out.lights = out.lights.concat(system.lights)
-            out.locks = out.locks.concat(system.locks)
-            return out
+            out.partitions = out.partitions.concat(system.partitions);
+            out.sensors = out.sensors.concat(system.sensors);
+            out.lights = out.lights.concat(system.lights);
+            out.locks = out.locks.concat(system.locks);
+            return out;
           }, {
             partitions: [],
             sensors: [],
             lights: [],
             locks: []
           }
-        )
-      })
+        );
+      });
   }
 
   refreshDevices() {
@@ -204,62 +218,67 @@ class ADCPlatform {
 
           if (system.partitions) {
             system.partitions.forEach(partition => {
-              const accessory = this.accessories[partition.id]
-              if (!accessory)
-                return this.addPartition(partition)
-              this.setPartitionState(accessory, partition)
-            })
+              const accessory = this.accessories[partition.id];
+              if (!accessory) {
+                return this.addPartition(partition);
+              }
+              this.setPartitionState(accessory, partition);
+            });
           } else {
-            throw new Error('Alarm.com: No partitions found, check configuration with security system provider')
+            throw new Error('Alarm.com: No partitions found, check configuration with security system provider');
           }
           // fatal error, need to catch and report in general log output
 
           if (system.sensors) {
             system.sensors.forEach(sensor => {
-              const accessory = this.accessories[sensor.id]
-              if (!accessory)
-                return this.addSensor(sensor)
-              this.setSensorState(accessory, sensor)
-            })
+              const accessory = this.accessories[sensor.id];
+              if (!accessory) {
+                return this.addSensor(sensor);
+              }
+              this.setSensorState(accessory, sensor);
+            });
           }
           // need to catch and report in loglevel debug
 
           if (system.locks) {
             system.locks.forEach(lock => {
-              const accessory = this.accessories[lock.id]
-              if (!accessory)
-                return this.addLock(lock)
-              this.setLockState(accessory, lock)
-            })
+              const accessory = this.accessories[lock.id];
+              if (!accessory) {
+                return this.addLock(lock);
+              }
+              this.setLockState(accessory, lock);
+            });
           }
           // need to catch and report in loglevel debug
 
           if (system.light) {
             system.light.forEach(light => {
-              const accessory = this.accessories[light.id]
-              if (!accessory)
-                return this.addLight(light)
-              this.setLocalLightState(accessory, light)
-            })
+              const accessory = this.accessories[light.id];
+              if (!accessory) {
+                return this.addLight(light);
+              }
+              this.setLocalLightState(accessory, light);
+            });
           }
           // need to catch and report in loglevel debug
 
-        })
+        });
       })
-      .catch(err => this.log(err))
+      .catch(err => this.log(err));
   }
 
   // Partition Methods /////////////////////////////////////////////////////////
 
   addPartition(partition) {
-    const id = partition.id
-    let accessory = this.accessories[id]
-    if (accessory)
-      this.removeAccessory(accessory)
+    const id = partition.id;
+    let accessory = this.accessories[id];
+    if (accessory) {
+      this.removeAccessory(accessory);
+    }
 
-    const name = partition.attributes.description
-    const uuid = UUIDGen.generate(id)
-    accessory = new Accessory(name, uuid)
+    const name = partition.attributes.description;
+    const uuid = UUIDGen.generate(id);
+    accessory = new Accessory(name, uuid);
 
     accessory.context = {
       accID: id,
@@ -268,148 +287,155 @@ class ADCPlatform {
       desiredState: null,
       statusFault: null,
       partitionType: 'default'
+    };
+
+    if (this.config.logLevel > 2) {
+      this.log(`Adding partition ${name} (id=${id}, uuid=${uuid})`);
     }
 
-    if (this.config.logLevel > 2)
-      this.log(`Adding partition ${name} (id=${id}, uuid=${uuid})`)
+    this.addAccessory(accessory, Service.SecuritySystem, 'Security Panel');
 
-    this.addAccessory(accessory, Service.SecuritySystem, 'Security Panel')
-
-    this.setupPartition(accessory)
+    this.setupPartition(accessory);
 
     // Set the initial partition state
-    this.setPartitionState(accessory, partition)
+    this.setPartitionState(accessory, partition);
   }
 
   setupPartition(accessory) {
-    const id = accessory.context.accID
-    const name = accessory.context.name
-    const model = 'Security Panel'
+    const id = accessory.context.accID;
+    const name = accessory.context.name;
+    const model = 'Security Panel';
 
     // Always reachable
-    accessory.reachable = true
+    accessory.reachable = true;
 
     // Setup HomeKit accessory information
     accessory
       .getService(Service.AccessoryInformation)
       .setCharacteristic(Characteristic.Manufacturer, MANUFACTURER)
       .setCharacteristic(Characteristic.Model, model)
-      .setCharacteristic(Characteristic.SerialNumber, id)
+      .setCharacteristic(Characteristic.SerialNumber, id);
 
     // Setup event listeners
     accessory.on('identify', (paired, callback) => {
-      if (this.config.logLevel > 3)
-        this.log(`${name} identify requested, paired=${paired}`)
+      if (this.config.logLevel > 3) {
+        this.log(`${name} identify requested, paired=${paired}`);
+      }
 
-      callback()
-    })
+      callback();
+    });
 
-    const service = accessory.getService(Service.SecuritySystem)
+    const service = accessory.getService(Service.SecuritySystem);
 
     service
       .getCharacteristic(Characteristic.SecuritySystemCurrentState)
-      .on('get', callback => callback(null, accessory.context.state))
+      .on('get', callback => callback(null, accessory.context.state));
 
     service
       .getCharacteristic(Characteristic.SecuritySystemTargetState)
       .on('get', callback => callback(null, accessory.context.desiredState))
       .on('set', (value, callback) =>
         this.changePartitionState(accessory, value, callback)
-      )
+      );
 
     service
       .getCharacteristic(Characteristic.StatusFault)
-      .on('get', callback => callback(null, accessory.context.statusFault))
+      .on('get', callback => callback(null, accessory.context.statusFault));
   }
 
   setPartitionState(accessory, partition) {
-    const id = accessory.context.accID
-    const name = accessory.context.name
-    const state = getPartitionState(partition.attributes.state)
-    const desiredState = getPartitionState(partition.attributes.desiredState)
-    const statusFault = Boolean(partition.attributes.needsClearIssuesPrompt)
+    const id = accessory.context.accID;
+    const name = accessory.context.name;
+    const state = getPartitionState(partition.attributes.state);
+    const desiredState = getPartitionState(partition.attributes.desiredState);
+    const statusFault = Boolean(partition.attributes.needsClearIssuesPrompt);
 
     if (state !== accessory.context.state) {
-      if (this.config.logLevel > 2)
+      if (this.config.logLevel > 2) {
         this.log(
           `Updating partition ${name} (${id}), state=${state}, prev=${
-          accessory.context.state
+            accessory.context.state
           }`
-        )
+        );
+      }
 
-      accessory.context.state = state
+      accessory.context.state = state;
       accessory
         .getService(Service.SecuritySystem)
         .getCharacteristic(Characteristic.SecuritySystemCurrentState)
-        .updateValue(state)
+        .updateValue(state);
     }
 
     if (desiredState !== accessory.context.desiredState) {
-      if (this.config.logLevel > 2)
+      if (this.config.logLevel > 2) {
         this.log(
           `Updating partition ${name} (${id}), desiredState=${desiredState}, prev=${
-          accessory.context.desiredState
+            accessory.context.desiredState
           }`
-        )
+        );
+      }
 
-      accessory.context.desiredState = desiredState
+      accessory.context.desiredState = desiredState;
       accessory
         .getService(Service.SecuritySystem)
         .getCharacteristic(Characteristic.SecuritySystemTargetState)
-        .updateValue(desiredState)
+        .updateValue(desiredState);
     }
 
     if (statusFault !== accessory.context.statusFault) {
-      if (this.config.logLevel > 2)
+      if (this.config.logLevel > 2) {
         this.log(
           `Updating partition ${name} (${id}), statusFault=${statusFault}, prev=${
-          accessory.context.statusFault
+            accessory.context.statusFault
           }`
-        )
+        );
+      }
 
-      accessory.context.statusFault = statusFault
+      accessory.context.statusFault = statusFault;
       accessory
         .getService(Service.SecuritySystem)
         .getCharacteristic(Characteristic.StatusFault)
-        .updateValue(statusFault)
+        .updateValue(statusFault);
     }
   }
 
   changePartitionState(accessory, value, callback) {
-    const id = accessory.context.accID
-    let method
-    const opts = {}
+    const id = accessory.context.accID;
+    let method;
+    const opts = {};
 
     switch (value) {
       case Characteristic.SecuritySystemTargetState.STAY_ARM:
-        method = nodeADC.armStay
+        method = nodeADC.armStay;
         opts.noEntryDelay = this.armingModes.stay.noEntryDelay;
         opts.silentArming = this.armingModes.stay.silentArming;
-        break
+        break;
       case Characteristic.SecuritySystemTargetState.NIGHT_ARM:
-        method = nodeADC.armStay
+        method = nodeADC.armStay;
         opts.noEntryDelay = this.armingModes.night.noEntryDelay;
         opts.silentArming = this.armingModes.night.silentArming;
-        break
+        break;
       case Characteristic.SecuritySystemTargetState.AWAY_ARM:
-        method = nodeADC.armAway
+        method = nodeADC.armAway;
         opts.noEntryDelay = this.armingModes.away.noEntryDelay;
         opts.silentArming = this.armingModes.away.silentArming;
-        break
+        break;
       case Characteristic.SecuritySystemTargetState.DISARM:
-        method = nodeADC.disarm
-        break
+        method = nodeADC.disarm;
+        break;
       default:
-        const msg = `Can't set SecuritySystem to unknown value ${value}`
-        if (this.config.logLevel > 1)
-          this.log(msg)
-        return callback(new Error(msg))
+        const msg = `Can't set SecuritySystem to unknown value ${value}`;
+        if (this.config.logLevel > 1) {
+          this.log(msg);
+        }
+        return callback(new Error(msg));
     }
 
-    if (this.config.logLevel > 2)
-      this.log(`changePartitionState(${accessory.context.accID}, ${value})`)
+    if (this.config.logLevel > 2) {
+      this.log(`changePartitionState(${accessory.context.accID}, ${value})`);
+    }
 
-    accessory.context.desiredState = value
+    accessory.context.desiredState = value;
 
     this.login()
       .then(res => method(id, res, opts)) // Usually 20-30 seconds
@@ -417,33 +443,35 @@ class ADCPlatform {
       .then(partition => this.setPartitionState(accessory, partition))
       .then(_ => callback())
       .catch(err => {
-        this.log(`Error: Failed to change partition state: ${err.stack}`)
-        this.refreshDevices()
-        callback(err)
-      })
+        this.log(`Error: Failed to change partition state: ${err.stack}`);
+        this.refreshDevices();
+        callback(err);
+      });
   }
 
   // Sensor Methods ////////////////////////////////////////////////////////////
 
   addSensor(sensor) {
-    const id = sensor.id
-    let accessory = this.accessories[id]
+    const id = sensor.id;
+    let accessory = this.accessories[id];
     // in an ideal world, homebridge shouldn't be restarted too often
     // so upon starting we clean out the cache of alarm accessories
-    if (accessory)
-      this.removeAccessory(accessory)
-
-    const [type, characteristic, model] = getSensorType(sensor)
-    if (type === undefined) {
-      if (this.config.logLevel > 1)
-        this.log(`Warning: Sensor with unknown state ${sensor.attributes.state}`)
-
-      return
+    if (accessory) {
+      this.removeAccessory(accessory);
     }
 
-    const name = sensor.attributes.description
-    const uuid = UUIDGen.generate(id)
-    accessory = new Accessory(name, uuid)
+    const [type, characteristic, model] = getSensorType(sensor);
+    if (type === undefined) {
+      if (this.config.logLevel > 1) {
+        this.log(`Warning: Sensor with unknown state ${sensor.attributes.state}`);
+      }
+
+      return;
+    }
+
+    const name = sensor.attributes.description;
+    const uuid = UUIDGen.generate(id);
+    accessory = new Accessory(name, uuid);
 
     accessory.context = {
       accID: id,
@@ -451,88 +479,93 @@ class ADCPlatform {
       state: null,
       batteryLow: false,
       sensorType: model
-    }
+    };
 
     // if the sensor id is not in the ignore list in the homebridge config
     if (!this.ignoredDevices.includes(id)) {
-      if (this.config.logLevel > 2)
-        this.log(`Adding ${model} "${name}" (id=${id}, uuid=${uuid})`)
+      if (this.config.logLevel > 2) {
+        this.log(`Adding ${model} "${name}" (id=${id}, uuid=${uuid})`);
+      }
 
-      this.addAccessory(accessory, type, model)
-      this.setupSensor(accessory)
+      this.addAccessory(accessory, type, model);
+      this.setupSensor(accessory);
 
       // Set the initial sensor state
-      this.setSensorState(accessory, sensor)
+      this.setSensorState(accessory, sensor);
     }
   }
 
   setupSensor(accessory) {
-    const id = accessory.context.accID
-    const name = accessory.context.name
-    const model = accessory.context.sensorType
-    const [type, characteristic] = sensorModelToType(model)
-    if (!characteristic && this.config.logLevel > 1)
-      throw new Error(`Unrecognized sensor ${accessory.context.accID}`)
+    const id = accessory.context.accID;
+    const name = accessory.context.name;
+    const model = accessory.context.sensorType;
+    const [type, characteristic] = sensorModelToType(model);
+    if (!characteristic && this.config.logLevel > 1) {
+      throw new Error(`Unrecognized sensor ${accessory.context.accID}`);
+    }
 
     // Always reachable
-    accessory.reachable = true
+    accessory.reachable = true;
 
     // Setup HomeKit accessory information
     accessory
       .getService(Service.AccessoryInformation)
       .setCharacteristic(Characteristic.Manufacturer, MANUFACTURER)
       .setCharacteristic(Characteristic.Model, model)
-      .setCharacteristic(Characteristic.SerialNumber, id)
+      .setCharacteristic(Characteristic.SerialNumber, id);
 
     // Setup event listeners
 
     accessory.on('identify', (paired, callback) => {
-      if (this.config.logLevel > 2)
-        this.log(`${name} identify requested, paired=${paired}`)
+      if (this.config.logLevel > 2) {
+        this.log(`${name} identify requested, paired=${paired}`);
+      }
 
-      callback()
-    })
+      callback();
+    });
 
-    const service = accessory.getService(type)
+    const service = accessory.getService(type);
 
     service
       .getCharacteristic(characteristic)
-      .on('get', callback => callback(null, accessory.context.state))
+      .on('get', callback => callback(null, accessory.context.state));
 
     service
       .getCharacteristic(Characteristic.StatusLowBattery)
-      .on('get', callback => callback(null, accessory.context.batteryLow))
+      .on('get', callback => callback(null, accessory.context.batteryLow));
   }
 
   setSensorState(accessory, sensor) {
-    const id = accessory.context.accID
-    const name = accessory.context.name
-    const state = getSensorState(sensor)
+    const id = accessory.context.accID;
+    const name = accessory.context.name;
+    const state = getSensorState(sensor);
     const batteryLow = Boolean(
       sensor.attributes.lowBattery || sensor.attributes.criticalBattery
-    )
-    const [type, characteristic, model] = getSensorType(sensor)
+    );
+    const [type, characteristic, model] = getSensorType(sensor);
 
     if (state !== accessory.context.state) {
-      if (this.config.logLevel > 2)
-        this.log(`Updating sensor ${name} (${id}), state=${state}, prev=${accessory.context.state}`)
+      if (this.config.logLevel > 2) {
+        this.log(`Updating sensor ${name} (${id}), state=${state}, prev=${accessory.context.state}`);
+      }
 
-      accessory.context.state = state
+      accessory.context.state = state;
       accessory
         .getService(type)
         .getCharacteristic(characteristic)
-        .updateValue(state)
+        .updateValue(state);
     }
 
     if (batteryLow !== accessory.context.batteryLow) {
-      if (this.config.logLevel > 2)
-        this.log(`Updating sensor ${name} (${id}), batteryLow=${batteryLow}, prev=${accessory.context.batteryLow}`)
+      if (this.config.logLevel > 2) {
+        this.log(`Updating sensor ${name} (${id}), batteryLow=${batteryLow}, prev=${accessory.context.batteryLow}`);
+      }
 
-      accessory.context.batteryLow = batteryLow
+      accessory.context.batteryLow = batteryLow;
       accessory
         .getService(type)
         .getCharacteristic(Characteristic.StatusLowBattery)
-        .updateValue(batteryLow)
+        .updateValue(batteryLow);
     }
   }
 
@@ -543,21 +576,22 @@ class ADCPlatform {
    * @param {Object} light
    */
   addLight(light) {
-    const id = light.id
-    let accessory = this.accessories[id]
+    const id = light.id;
+    let accessory = this.accessories[id];
     // in an ideal world, homebridge shouldn't be restarted too often
     // so upon starting we clean out the cache of alarm accessories
-    if (accessory)
-      this.removeAccessory(accessory)
+    if (accessory) {
+      this.removeAccessory(accessory);
+    }
 
     const [type, model] = [
       Service.Lightbulb,
       'Light'
-    ]
+    ];
 
-    const name = light.attributes.description
-    const uuid = UUIDGen.generate(id)
-    accessory = new Accessory(name, uuid)
+    const name = light.attributes.description;
+    const uuid = UUIDGen.generate(id);
+    accessory = new Accessory(name, uuid);
 
     accessory.context = {
       accID: id,
@@ -567,18 +601,19 @@ class ADCPlatform {
       isDimmer: light.attributes.isDimmer,
       lightLevel: light.attributes.lightLevel,
       lightType: model
-    }
+    };
 
     // if the light id is not in the ignore list in the homebridge config
     if (!this.ignoredDevices.includes(id)) {
-      if (this.config.logLevel > 2)
-        this.log(`Adding ${model} "${name}" (id=${id}, uuid=${uuid}) (${accessory.context.state} ${accessory.context.desiredState})`)
+      if (this.config.logLevel > 2) {
+        this.log(`Adding ${model} "${name}" (id=${id}, uuid=${uuid}) (${accessory.context.state} ${accessory.context.desiredState})`);
+      }
 
-      this.addAccessory(accessory, type, model)
-      this.setupLight(accessory)
+      this.addAccessory(accessory, type, model);
+      this.setupLight(accessory);
 
       // Set the initial light state
-      this.setLocalLightState(accessory, light)
+      this.setLocalLightState(accessory, light);
     }
   }
 
@@ -587,44 +622,45 @@ class ADCPlatform {
    * @param accessory
    */
   setupLight(accessory) {
-    const id = accessory.context.accID
-    const name = accessory.context.name
-    const model = accessory.context.lightType
-    const type = Service.Lightbulb
+    const id = accessory.context.accID;
+    const name = accessory.context.name;
+    const model = accessory.context.lightType;
+    const type = Service.Lightbulb;
 
     // Always reachable
-    accessory.reachable = true
+    accessory.reachable = true;
 
     // Setup HomeKit accessory information
     accessory
       .getService(Service.AccessoryInformation)
       .setCharacteristic(Characteristic.Manufacturer, MANUFACTURER)
       .setCharacteristic(Characteristic.Model, model)
-      .setCharacteristic(Characteristic.SerialNumber, id)
+      .setCharacteristic(Characteristic.SerialNumber, id);
 
     // Setup event listeners
 
     accessory.on('identify', (paired, callback) => {
-      if (this.config.logLevel > 2)
-        this.log(`${name} identify requested, paired=${paired}`)
+      if (this.config.logLevel > 2) {
+        this.log(`${name} identify requested, paired=${paired}`);
+      }
 
-      callback()
-    })
+      callback();
+    });
 
-    const service = accessory.getService(type)
+    const service = accessory.getService(type);
 
     service
       .getCharacteristic(Characteristic.On)
       .on('get', callback => {
-        callback(null, accessory.context.state)
+        callback(null, accessory.context.state);
       })
-      .on('set', (value, callback) => this.changeLightState(accessory, value, accessory.context.state, callback))
+      .on('set', (value, callback) => this.changeLightState(accessory, value, accessory.context.state, callback));
 
     if (accessory.context.isDimmer) {
       service
         .getCharacteristic(Characteristic.Brightness)
         .on('get', callback => callback(null, accessory.context.lightLevel))
-        .on('set', (value, callback) => this.changeLightState(accessory, value, accessory.context.lightLevel, callback))
+        .on('set', (value, callback) => this.changeLightState(accessory, value, accessory.context.lightLevel, callback));
     }
   }
 
@@ -634,28 +670,29 @@ class ADCPlatform {
    * @param light The light parameters from Alarm.com
    */
   setLocalLightState(accessory, light) {
-    const id = accessory.context.accID
-    const name = accessory.context.name
-    const state = getLightState(light.attributes.state)
-    const brightness = light.attributes.lightLevel
+    const id = accessory.context.accID;
+    const name = accessory.context.name;
+    const state = getLightState(light.attributes.state);
+    const brightness = light.attributes.lightLevel;
 
     if (state !== accessory.context.state) {
-      if (this.config.logLevel > 2)
-        this.log(`Updating light ${name} (${id}), state=${state}, prev=${accessory.context.state}`)
+      if (this.config.logLevel > 2) {
+        this.log(`Updating light ${name} (${id}), state=${state}, prev=${accessory.context.state}`);
+      }
 
-      accessory.context.state = state
+      accessory.context.state = state;
       accessory
         .getService(Service.Lightbulb)
         .getCharacteristic(Characteristic.On)
-        .updateValue(state)
+        .updateValue(state);
     }
 
     if (accessory.context.isDimmer && brightness !== accessory.context.brightness) {
-      accessory.context.brightness = brightness
+      accessory.context.brightness = brightness;
       accessory
         .getService(Service.Lightbulb)
         .getCharacteristic(Characteristic.Brightness)
-        .updateValue(brightness)
+        .updateValue(brightness);
     }
   }
 
@@ -667,53 +704,56 @@ class ADCPlatform {
    * @param callback
    */
   changeLightState(accessory, value, brightness, callback) {
-    const id = accessory.context.accID
-    let method
+    const id = accessory.context.accID;
+    let method;
 
     if (value) {
-      method = nodeADC.setLightOn
+      method = nodeADC.setLightOn;
     } else {
-      method = nodeADC.setLightOff
+      method = nodeADC.setLightOff;
     }
 
-    if (this.config.logLevel > 2)
-      this.log(`Changing light (${accessory.context.accID}, ${value} light level ${brightness})`)
+    if (this.config.logLevel > 2) {
+      this.log(`Changing light (${accessory.context.accID}, ${value} light level ${brightness})`);
+    }
 
-    accessory.context.state = value
-    accessory.context.lightLevel = brightness
+    accessory.context.state = value;
+    accessory.context.lightLevel = brightness;
 
     this.login()
       .then(res => method(id, res, brightness)) // Usually 20-30 seconds
       .then(res => res.data)
       .then(light => {
-        this.setLocalLightState(accessory, light)
+        this.setLocalLightState(accessory, light);
       })
       .then(callback())
       .catch(err => {
-        this.log(`Error: Failed to change light state:\n ${err.stack}`)
-        this.refreshDevices()
-        callback(err)
-      })
+        this.log(`Error: Failed to change light state:
+         ${err.stack}`);
+        this.refreshDevices();
+        callback(err);
+      });
   }
 
   // Lock Methods /////////////////////////////////////////////////////////
 
   addLock(lock) {
-    const id = lock.id
-    let accessory = this.accessories[id]
+    const id = lock.id;
+    let accessory = this.accessories[id];
     // in an ideal world, homebridge shouldn't be restarted too often
     // so upon starting we clean out the cache of alarm accessories
-    if (accessory)
-      this.removeAccessory(accessory)
+    if (accessory) {
+      this.removeAccessory(accessory);
+    }
 
     const [type, model] = [
       Service.LockMechanism,
       'Door Lock'
-    ]
+    ];
 
-    const name = lock.attributes.description
-    const uuid = UUIDGen.generate(id)
-    accessory = new Accessory(name, uuid)
+    const name = lock.attributes.description;
+    const uuid = UUIDGen.generate(id);
+    accessory = new Accessory(name, uuid);
 
     accessory.context = {
       accID: id,
@@ -721,155 +761,164 @@ class ADCPlatform {
       state: lock.attributes.state,
       desiredState: lock.attributes.desiredState,
       lockType: model
-    }
+    };
 
     // if the lock id is not in the ignore list in the homebridge config
     if (!this.ignoredDevices.includes(id)) {
-      if (this.config.logLevel > 2)
-        this.log(`Adding ${model} "${name}" (id=${id}, uuid=${uuid}) (${accessory.context.state} ${accessory.context.desiredState})`)
+      if (this.config.logLevel > 2) {
+        this.log(`Adding ${model} "${name}" (id=${id}, uuid=${uuid}) (${accessory.context.state} ${accessory.context.desiredState})`);
+      }
 
-      this.addAccessory(accessory, type, model)
-      this.setupLock(accessory)
+      this.addAccessory(accessory, type, model);
+      this.setupLock(accessory);
 
       // Set the initial lock state
-      this.setLockState(accessory, lock)
+      this.setLockState(accessory, lock);
     }
   }
 
   setupLock(accessory) {
-    const id = accessory.context.accID
-    const name = accessory.context.name
-    const model = accessory.context.lockType
+    const id = accessory.context.accID;
+    const name = accessory.context.name;
+    const model = accessory.context.lockType;
     const [type, characteristic] = [
       Service.LockMechanism,
       Characteristic.LockCurrentState,
-    ]
-    if (!characteristic && this.config.logLevel > 1)
-      throw new Error(`Unrecognized lock ${accessory.context.accID}`)
+    ];
+    if (!characteristic && this.config.logLevel > 1) {
+      throw new Error(`Unrecognized lock ${accessory.context.accID}`);
+    }
 
     // Always reachable
-    accessory.reachable = true
+    accessory.reachable = true;
 
     // Setup HomeKit accessory information
     accessory
       .getService(Service.AccessoryInformation)
       .setCharacteristic(Characteristic.Manufacturer, MANUFACTURER)
       .setCharacteristic(Characteristic.Model, model)
-      .setCharacteristic(Characteristic.SerialNumber, id)
+      .setCharacteristic(Characteristic.SerialNumber, id);
 
     // Setup event listeners
 
     accessory.on('identify', (paired, callback) => {
-      if (this.config.logLevel > 2)
-        this.log(`${name} identify requested, paired=${paired}`)
+      if (this.config.logLevel > 2) {
+        this.log(`${name} identify requested, paired=${paired}`);
+      }
 
-      callback()
-    })
+      callback();
+    });
 
-    const service = accessory.getService(type)
+    const service = accessory.getService(type);
 
     service
       .getCharacteristic(Characteristic.LockCurrentState)
       .on('get', callback => {
-        callback(null, accessory.context.state)
-      })
+        callback(null, accessory.context.state);
+      });
 
     service
       .getCharacteristic(Characteristic.LockTargetState)
       .on('get', callback => callback(null, accessory.context.desiredState))
-      .on('set', (value, callback) => this.changeLockState(accessory, value, callback))
+      .on('set', (value, callback) => this.changeLockState(accessory, value, callback));
   }
 
   setLockState(accessory, lock) {
-    const id = accessory.context.accID
-    const name = accessory.context.name
-    const state = getLockState(lock.attributes.state)
-    const desiredState = getLockState(lock.attributes.desiredState)
+    const id = accessory.context.accID;
+    const name = accessory.context.name;
+    const state = getLockState(lock.attributes.state);
+    const desiredState = getLockState(lock.attributes.desiredState);
 
     if (state !== accessory.context.state) {
-      if (this.config.logLevel > 2)
-        this.log(`Updating lock ${name} (${id}), state=${state}, prev=${accessory.context.state}`)
+      if (this.config.logLevel > 2) {
+        this.log(`Updating lock ${name} (${id}), state=${state}, prev=${accessory.context.state}`);
+      }
 
-      accessory.context.state = state
+      accessory.context.state = state;
       accessory
         .getService(Service.LockMechanism)
         .getCharacteristic(Characteristic.LockCurrentState)
-        .updateValue(state)
+        .updateValue(state);
     }
 
     if (desiredState !== accessory.context.desiredState) {
-      accessory.context.desiredState = desiredState
+      accessory.context.desiredState = desiredState;
       accessory
         .getService(Service.LockMechanism)
         .getCharacteristic(Characteristic.LockTargetState)
-        .updateValue(desiredState)
+        .updateValue(desiredState);
     }
   }
 
   changeLockState(accessory, value, callback) {
-    const id = accessory.context.accID
-    let method
-    const opts = {}
+    const id = accessory.context.accID;
+    let method;
+    const opts = {};
 
     switch (value) {
       case Characteristic.LockTargetState.UNSECURED:
-        method = nodeADC.setLockUnsecure
-        break
+        method = nodeADC.setLockUnsecure;
+        break;
       case Characteristic.LockTargetState.SECURED:
-        method = nodeADC.setLockSecure
-        break
+        method = nodeADC.setLockSecure;
+        break;
       default:
-        const msg = `Can't set LockMechanism to unknown value ${value}`
-        if (this.config.logLevel > 1)
-          this.log(msg)
-        return callback(new Error(msg))
+        const msg = `Can't set LockMechanism to unknown value ${value}`;
+        if (this.config.logLevel > 1) {
+          this.log(msg);
+        }
+        return callback(new Error(msg));
     }
 
-    if (this.config.logLevel > 2)
-      this.log(`(un)secureLock)(${accessory.context.accID}, ${value})`)
+    if (this.config.logLevel > 2) {
+      this.log(`(un)secureLock)(${accessory.context.accID}, ${value})`);
+    }
 
-    accessory.context.desiredState = value
+    accessory.context.desiredState = value;
 
     this.login()
       .then(res => method(id, res, opts)) // Usually 20-30 seconds
       .then(res => res.data)
       .then(lock => {
-        this.setLockState(accessory, lock)
+        this.setLockState(accessory, lock);
       })
       .then(_ => callback())
       .catch(err => {
-        this.log(`Error: Failed to change lock state: ${err.stack}`)
-        this.refreshDevices()
-        callback(err)
-      })
+        this.log(`Error: Failed to change lock state: ${err.stack}`);
+        this.refreshDevices();
+        callback(err);
+      });
   }
 
   // Accessory Methods /////////////////////////////////////////////////////////
 
   addAccessory(accessory, type, model) {
-    const id = accessory.context.accID
-    const name = accessory.context.name
-    this.accessories[id] = accessory
+    const id = accessory.context.accID;
+    const name = accessory.context.name;
+    this.accessories[id] = accessory;
 
     // Setup HomeKit service
-    accessory.addService(type, name)
+    accessory.addService(type, name);
 
     // Register new accessory in HomeKit
-    this.api.registerPlatformAccessories(PLUGIN_ID, PLUGIN_NAME, [accessory])
+    this.api.registerPlatformAccessories(PLUGIN_ID, PLUGIN_NAME, [accessory]);
   }
 
   removeAccessory(accessory) {
-    if (!accessory) return
+    if (!accessory) {
+      return;
+    }
 
-    const id = accessory.context.accID
-    if (this.config.logLevel > 2)
-      this.log(`Removing ${accessory.context.name} (${id}) from HomeBridge.`)
-    this.api.unregisterPlatformAccessories(PLUGIN_ID, PLUGIN_NAME, [accessory])
-    delete this.accessories[id]
+    const id = accessory.context.accID;
+    if (this.config.logLevel > 2) {
+      this.log(`Removing ${accessory.context.name} (${id}) from HomeBridge.`);
+    }
+    this.api.unregisterPlatformAccessories(PLUGIN_ID, PLUGIN_NAME, [accessory]);
+    delete this.accessories[id];
   }
 
   removeAccessories() {
-    this.accessories.forEach(id => this.removeAccessory(this.accessories[id]))
+    this.accessories.forEach(id => this.removeAccessory(this.accessories[id]));
   }
 
 }
@@ -880,7 +929,7 @@ class ADCPlatform {
  * @returns {Promise<[(number | bigint), number, number, number, number, number, number, number, number, number]>} See systemState.ts for return type
  */
 function fetchStateForAllSystems(res) {
-  return Promise.all(res.systems.map(id => nodeADC.getCurrentState(id, res)))
+  return Promise.all(res.systems.map(id => nodeADC.getCurrentState(id, res)));
 }
 
 /**
@@ -891,15 +940,15 @@ function fetchStateForAllSystems(res) {
 function getPartitionState(state) {
   switch (state) {
     case nodeADC.SYSTEM_STATES.ARMED_STAY:
-      return Characteristic.SecuritySystemCurrentState.STAY_ARM
+      return Characteristic.SecuritySystemCurrentState.STAY_ARM;
     case nodeADC.SYSTEM_STATES.ARMED_AWAY:
-      return Characteristic.SecuritySystemCurrentState.AWAY_ARM
+      return Characteristic.SecuritySystemCurrentState.AWAY_ARM;
     case nodeADC.SYSTEM_STATES.ARMED_NIGHT:
-      return Characteristic.SecuritySystemCurrentState.NIGHT_ARM
+      return Characteristic.SecuritySystemCurrentState.NIGHT_ARM;
     case nodeADC.SYSTEM_STATES.UNKNOWN:
     case nodeADC.SYSTEM_STATES.DISARMED:
     default:
-      return Characteristic.SecuritySystemCurrentState.DISARMED
+      return Characteristic.SecuritySystemCurrentState.DISARMED;
   }
 }
 
@@ -911,11 +960,11 @@ function getPartitionState(state) {
 function getLockState(state) {
   switch (state) {
     case nodeADC.LOCK_STATES.UNSECURED:
-      return Characteristic.LockCurrentState.UNSECURED
+      return Characteristic.LockCurrentState.UNSECURED;
     case nodeADC.LOCK_STATES.SECURED:
-      return Characteristic.LockCurrentState.SECURED
+      return Characteristic.LockCurrentState.SECURED;
     default:
-      return Characteristic.LockCurrentState.UNKNOWN
+      return Characteristic.LockCurrentState.UNKNOWN;
   }
 }
 
@@ -927,11 +976,11 @@ function getLockState(state) {
 function getLightState(state) {
   switch (state) {
     case nodeADC.LIGHT_STATES.OFF:
-      return 0
+      return 0;
     case nodeADC.LIGHT_STATES.ON:
-      return 1
+      return 1;
     default:
-      return undefined
+      return undefined;
   }
 }
 
@@ -945,24 +994,24 @@ function getSensorState(sensor) {
   // console.log(sensor)
   switch (sensor.attributes.state) {
     case nodeADC.SENSOR_STATES.OPEN:
-      return Characteristic.ContactSensorState.CONTACT_NOT_DETECTED
+      return Characteristic.ContactSensorState.CONTACT_NOT_DETECTED;
     case nodeADC.SENSOR_STATES.CLOSED:
-      return Characteristic.ContactSensorState.CONTACT_DETECTED
+      return Characteristic.ContactSensorState.CONTACT_DETECTED;
     case nodeADC.SENSOR_STATES.ACTIVE:
-      return Characteristic.OccupancyDetected.OCCUPANCY_DETECTED
+      return Characteristic.OccupancyDetected.OCCUPANCY_DETECTED;
     case nodeADC.SENSOR_STATES.IDLE:
-      return Characteristic.OccupancyDetected.OCCUPANCY_NOT_DETECTED
+      return Characteristic.OccupancyDetected.OCCUPANCY_NOT_DETECTED;
     case nodeADC.SENSOR_STATES.WET:
-      return Characteristic.LeakDetected.LEAK_DETECTED
+      return Characteristic.LeakDetected.LEAK_DETECTED;
     case nodeADC.SENSOR_STATES.DRY:
-      return Characteristic.LeakDetected.LEAK_NOT_DETECTED
+      return Characteristic.LeakDetected.LEAK_NOT_DETECTED;
     default:
-      return undefined
+      return undefined;
   }
 }
 
 function getSensorType(sensor) {
-  const state = sensor.attributes.state
+  const state = sensor.attributes.state;
 
   switch (state) {
     case nodeADC.SENSOR_STATES.CLOSED:
@@ -971,23 +1020,23 @@ function getSensorType(sensor) {
         Service.ContactSensor,
         Characteristic.ContactSensorState,
         'Contact Sensor'
-      ]
+      ];
     case nodeADC.SENSOR_STATES.IDLE:
     case nodeADC.SENSOR_STATES.ACTIVE:
       return [
         Service.OccupancySensor,
         Characteristic.OccupancyDetected,
         'Occupancy Sensor'
-      ]
+      ];
     case nodeADC.SENSOR_STATES.DRY:
     case nodeADC.SENSOR_STATES.WET:
       return [
         Service.LeakSensor,
         Characteristic.LeakDetected,
         'Leak Sensor'
-      ]
+      ];
     default:
-      return [undefined, undefined, undefined]
+      return [undefined, undefined, undefined];
   }
 }
 
@@ -997,18 +1046,18 @@ function sensorModelToType(model) {
       return [
         Service.ContactSensor,
         Characteristic.ContactSensorState
-      ]
+      ];
     case 'Occupancy Sensor':
       return [
         Service.OccupancySensor,
         Characteristic.OccupancyDetected
-      ]
+      ];
     case 'Leak Sensor':
       return [
         Service.LeakSensor,
         Characteristic.LeakDetected
-      ]
+      ];
     default:
-      return [undefined, undefined]
+      return [undefined, undefined];
   }
 }
