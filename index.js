@@ -238,7 +238,7 @@ class ADCPlatform {
             system.light.forEach(light => {
               const accessory = this.accessories[light.id]
               if (!accessory)
-                return this.addLight(lock)
+                return this.addLight(light)
               this.setLocalLightState(accessory, light)
             })
           }
