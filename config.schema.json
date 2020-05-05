@@ -2,7 +2,7 @@
   "pluginAlias": "Alarmdotcom",
   "pluginType": "platform",
   "singular": true,
-  "headerDisplay": "Alarm Dot Com security system plugin using Node.js API",
+  "headerDisplay": "Alarm.com security system plugin using Node.js API",
   "schema": {
     "type": "object",
     "properties": {
