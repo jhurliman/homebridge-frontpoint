@@ -1,5 +1,5 @@
 {
-  "pluginAlias": "Alarm Dot Com",
+  "pluginAlias": "Alarmdotcom",
   "pluginType": "platform",
   "singular": true,
   "headerDisplay": "Alarm Dot Com security system plugin using Node.js API",
