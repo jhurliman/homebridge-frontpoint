@@ -1,0 +1,50 @@
+{
+  "pluginAlias": "Alarmdotcom",
+  "pluginType": "platform",
+  "singular": true,
+  "headerDisplay": "Alarm.com security system plugin using Node.js API",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "title": "Name",
+        "type": "string",
+        "default": "Security System",
+        "description": "The name that will appear in your homebridge log"
+      },
+      "username": {
+        "title": "Username",
+        "type": "string",
+        "description": "Alarm.com username",
+        "required": true
+      },
+      "password": {
+        "title": "Password",
+        "type": "string",
+        "description": "Alarm.com password",
+        "required": true
+      },
+      "logLevel": {
+        "title": "Log Level",
+        "type": "integer",
+        "default": 3,
+        "required": true,
+        "oneOf": [
+          { "title": "No log entries", "enum": [0] },
+          { "title": "Only errors", "enum": [1] },
+          { "title": "Only warnings and errors", "enum": [2] },
+          { "title": "Notices, warnings, and errors", "enum": [3] },
+          { "title": "Verbose", "enum": [4] }
+        ]
+      },
+      "ignoredDevices": {
+        "title": "Ignored Devices",
+        "type": "array",
+        "items": {
+          "type": "string",
+          "placeholder": "96922426-1"
+        }
+      }
+    }
+  }
+}
