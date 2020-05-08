@@ -20,10 +20,10 @@ module.exports = function (homebridge) {
 
 class ADCPlatform {
   constructor(log, config, api) {
-    this.config.logLevel = this.config.logLevel || LOG_LEVEL;
     this.log = log
     this.config = config || { platform: PLUGIN_NAME }
     this.debug = this.config.debug || false
+    this.logLevel = this.config.logLevel || LOG_LEVEL
     this.ignoredDevices = this.config.ignoredDevices || []
 
     if (!this.config.username) {
@@ -84,7 +84,7 @@ class ADCPlatform {
             // throw error if no partition, ideally this should never occur
             throw new Error(`Received no partitions from Alarm.com`)
           } else if (res[device].length > 0) {
-            if (this.config.logLevel > 2) {
+            if (this.logLevel > 2) {
               this.log(`Received ${res[device].length} ${device} from Alarm.com`)
             }
 
@@ -104,17 +104,17 @@ class ADCPlatform {
                 }
                 // add more devices here as available, ie. garage doors, etc
 
-                if (this.config.logLevel > 2) {
+                if (this.logLevel > 2) {
                   this.log(`Added ${realDeviceType} ${d.attributes.description} (${d.id})`)
                 }
               } else {
-                if (this.config.logLevel > 2) {
+                if (this.logLevel > 2) {
                   this.log(`Ignored sensor ${d.attributes.description} (${d.id})`)
                 }
               }
             })
           } else {
-            if (this.config.logLevel > 3) {
+            if (this.logLevel > 3) {
               this.log(`Received no ${device} from Alarm.com. If you are expecting
               ${device} in your Alarm.com setup, you may need to check that your
               provider has assigned ${device} in your Alarm.com account`)
@@ -124,7 +124,7 @@ class ADCPlatform {
 
       })
       .catch(err => {
-        if (this.config.logLevel > 0) {
+        if (this.logLevel > 0) {
           this.log(`UNHANDLED ERROR: ${err.stack}`)
         }
       })
@@ -139,7 +139,7 @@ class ADCPlatform {
   configureAccessory(accessory) {
     // This calls the configureAccessory in homebridge core
 
-    if (this.config.logLevel > 2) {
+    if (this.logLevel > 2) {
       this.log(`Loaded from cache: ${accessory.context.name} (${accessory.context.accID})`)
     }
 
@@ -153,7 +153,7 @@ class ADCPlatform {
     } else if (accessory.context.sensorType) {
       this.setupSensor(accessory)
     } else {
-      if (this.config.logLevel > 1) {
+      if (this.logLevel > 1) {
         this.log(`Unrecognized accessory ${accessory.context.accID}`)
       }
     }
@@ -171,7 +171,7 @@ class ADCPlatform {
       return Promise.resolve(this.authOpts)
     }
 
-    if (this.config.logLevel > 2) {
+    if (this.logLevel > 2) {
       this.log(`Logging into Alarm.com as ${this.config.username}`)
     }
 
@@ -182,7 +182,7 @@ class ADCPlatform {
         authOpts.expires = +new Date() + 1000 * 60 * this.config.authTimeoutMinutes
         this.authOpts = authOpts
 
-        if (this.config.logLevel > 2) {
+        if (this.logLevel > 2) {
           this.log(`Logged into Alarm.com as ${this.config.username}`)
         }
 
@@ -292,7 +292,7 @@ class ADCPlatform {
       partitionType: 'default'
     }
 
-    if (this.config.logLevel > 2) {
+    if (this.logLevel > 2) {
       this.log(`Adding partition ${name} (id=${id}, uuid=${uuid})`)
     }
 
@@ -321,7 +321,7 @@ class ADCPlatform {
 
     // Setup event listeners
     accessory.on('identify', (paired, callback) => {
-      if (this.config.logLevel > 3) {
+      if (this.logLevel > 3) {
         this.log(`${name} identify requested, paired=${paired}`)
       }
 
@@ -354,7 +354,7 @@ class ADCPlatform {
     const statusFault = Boolean(partition.attributes.needsClearIssuesPrompt)
 
     if (state !== accessory.context.state) {
-      if (this.config.logLevel > 2) {
+      if (this.logLevel > 2) {
         this.log(`Updating partition ${name} (${id}), state=${state}, prev=${accessory.context.state}`)
       }
 
@@ -366,7 +366,7 @@ class ADCPlatform {
     }
 
     if (desiredState !== accessory.context.desiredState) {
-      if (this.config.logLevel > 2) {
+      if (this.logLevel > 2) {
         this.log(`Updating partition ${name} (${id}), desiredState=${desiredState}, prev=${accessory.context.desiredState}`
         )
       }
@@ -379,7 +379,7 @@ class ADCPlatform {
     }
 
     if (statusFault !== accessory.context.statusFault) {
-      if (this.config.logLevel > 2) {
+      if (this.logLevel > 2) {
         this.log(`Updating partition ${name} (${id}), statusFault=${statusFault}, prev=${accessory.context.statusFault}`)
       }
 
@@ -416,14 +416,14 @@ class ADCPlatform {
         method = nodeADC.disarm
         break
       default:
-        if (this.config.logLevel > 1) {
         const msg = `Can't set SecuritySystem to unknown value ${value}`
+        if (this.logLevel > 1) {
           this.log(msg)
         }
         return callback(new Error(msg))
     }
 
-    if (this.config.logLevel > 2) {
+    if (this.logLevel > 2) {
       this.log(`changePartitionState(${accessory.context.accID}, ${value})`)
     }
 
@@ -454,7 +454,7 @@ class ADCPlatform {
 
     const [type, characteristic, model] = getSensorType(sensor)
     if (type === undefined) {
-      if (this.config.logLevel > 1) {
+      if (this.logLevel > 1) {
         this.log(`Warning: Sensor with unknown state ${sensor.attributes.state}`)
       }
 
@@ -475,7 +475,7 @@ class ADCPlatform {
 
     // if the sensor id is not in the ignore list in the homebridge config
     if (!this.ignoredDevices.includes(id)) {
-      if (this.config.logLevel > 2) {
+      if (this.logLevel > 2) {
         this.log(`Adding ${model} "${name}" (id=${id}, uuid=${uuid})`)
       }
 
@@ -488,11 +488,11 @@ class ADCPlatform {
   }
 
   setupSensor(accessory) {
-    if (!characteristic && this.config.logLevel > 1) {
     const id = accessory.context.accID
     const name = accessory.context.name
     const model = accessory.context.sensorType
     const [type, characteristic] = sensorModelToType(model)
+    if (!characteristic && this.logLevel > 1) {
       throw new Error(`Unrecognized sensor ${accessory.context.accID}`)
     }
 
@@ -509,7 +509,7 @@ class ADCPlatform {
     // Setup event listeners
 
     accessory.on('identify', (paired, callback) => {
-      if (this.config.logLevel > 2) {
+      if (this.logLevel > 2) {
         this.log(`${name} identify requested, paired=${paired}`)
       }
 
@@ -537,7 +537,7 @@ class ADCPlatform {
     const [type, characteristic, model] = getSensorType(sensor)
 
     if (state !== accessory.context.state) {
-      if (this.config.logLevel > 2) {
+      if (this.logLevel > 2) {
         this.log(`Updating sensor ${name} (${id}), state=${state}, prev=${accessory.context.state}`)
       }
 
@@ -549,7 +549,7 @@ class ADCPlatform {
     }
 
     if (batteryLow !== accessory.context.batteryLow) {
-      if (this.config.logLevel > 2) {
+      if (this.logLevel > 2) {
         this.log(`Updating sensor ${name} (${id}), batteryLow=${batteryLow}, prev=${accessory.context.batteryLow}`)
       }
 
@@ -597,7 +597,7 @@ class ADCPlatform {
 
     // if the light id is not in the ignore list in the homebridge config
     if (!this.ignoredDevices.includes(id)) {
-      if (this.config.logLevel > 2) {
+      if (this.logLevel > 2) {
         this.log(`Adding ${model} "${name}" (id=${id}, uuid=${uuid}) (${accessory.context.state} ${accessory.context.desiredState})`)
       }
 
@@ -632,7 +632,7 @@ class ADCPlatform {
     // Setup event listeners
 
     accessory.on('identify', (paired, callback) => {
-      if (this.config.logLevel > 2) {
+      if (this.logLevel > 2) {
         this.log(`${name} identify requested, paired=${paired}`)
       }
 
@@ -705,7 +705,7 @@ class ADCPlatform {
       method = nodeADC.setLightOff
     }
 
-    if (this.config.logLevel > 2) {
+    if (this.logLevel > 2) {
       this.log(`Changing light (${accessory.context.accID}, ${value} light level ${brightness})`)
     }
 
@@ -757,7 +757,7 @@ class ADCPlatform {
 
     // if the lock id is not in the ignore list in the homebridge config
     if (!this.ignoredDevices.includes(id)) {
-      if (this.config.logLevel > 2) {
+      if (this.logLevel > 2) {
         this.log(`Adding ${model} "${name}" (id=${id}, uuid=${uuid}) (${accessory.context.state} ${accessory.context.desiredState})`)
       }
 
@@ -776,8 +776,8 @@ class ADCPlatform {
     const [type, characteristic] = [
       Service.LockMechanism,
       Characteristic.LockCurrentState,
-    if (!characteristic && this.config.logLevel > 1) {
     ]
+    if (!characteristic && this.logLevel > 1) {
       throw new Error(`Unrecognized lock ${accessory.context.accID}`)
     }
 
@@ -794,7 +794,7 @@ class ADCPlatform {
     // Setup event listeners
 
     accessory.on('identify', (paired, callback) => {
-      if (this.config.logLevel > 2) {
+      if (this.logLevel > 2) {
         this.log(`${name} identify requested, paired=${paired}`)
       }
 
@@ -822,7 +822,7 @@ class ADCPlatform {
     const desiredState = getLockState(lock.attributes.desiredState)
 
     if (state !== accessory.context.state) {
-      if (this.config.logLevel > 2) {
+      if (this.logLevel > 2) {
         this.log(`Updating lock ${name} (${id}), state=${state}, prev=${accessory.context.state}`)
       }
 
@@ -855,14 +855,14 @@ class ADCPlatform {
         method = nodeADC.setLockSecure
         break
       default:
-        if (this.config.logLevel > 1) {
         const msg = `Can't set LockMechanism to unknown value ${value}`
+        if (this.logLevel > 1) {
           this.log(msg)
         }
         return callback(new Error(msg))
     }
 
-    if (this.config.logLevel > 2) {
+    if (this.logLevel > 2) {
       this.log(`(un)secureLock)(${accessory.context.accID}, ${value})`)
     }
 
@@ -1033,7 +1033,7 @@ function getSensorType(sensor) {
   }
 }
     default:
-      return [undefined, undefined, undefined];
+      return [undefined, undefined, undefined]
   }
 }
 
