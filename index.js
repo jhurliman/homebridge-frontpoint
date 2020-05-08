@@ -19,6 +19,14 @@ module.exports = function (homebridge) {
 }
 
 class ADCPlatform {
+
+  /**
+   * The platform class constructor used when registering a plugin.
+   *
+   * @param log  The platform's logging function.
+   * @param config  The platform's config.json section as object.
+   * @param api  The homebridge API.
+   */
   constructor(log, config, api) {
     this.log = log
     this.config = config || { platform: PLUGIN_NAME }
@@ -75,6 +83,10 @@ class ADCPlatform {
 
   // List and Add Devices //////////////////////////////////////////////////////
 
+  /**
+   * When the homebridge api finally registers the plugin, the event
+   * 'didFinishLaunching is fired, calling this method to list the devices.
+   */
   didFinishLaunching() {
     this.listDevices()
       .then(res => {
@@ -136,8 +148,13 @@ class ADCPlatform {
     )
   }
 
+  /**
+   * REQUIRED: This method is called by homebridge to instantiate the accessory
+   * from the accessory cache.
+   *
+   * @param {object} accessory  The accessory in question.
+   */
   configureAccessory(accessory) {
-    // This calls the configureAccessory in homebridge core
 
     if (this.logLevel > 2) {
       this.log(`Loaded from cache: ${accessory.context.name} (${accessory.context.accID})`)
@@ -164,6 +181,9 @@ class ADCPlatform {
 
   // Internal Methods //////////////////////////////////////////////////////////
 
+  /**
+   * Method to retrieve/store/maintain login session state for the account.
+   */
   login() {
     // Cache expiration check
     const now = +new Date()
@@ -190,6 +210,9 @@ class ADCPlatform {
       })
   }
 
+  /**
+   * Method to gather devices and transform into a usable object.
+   */
   listDevices() {
     return this.login()
       .then(res => fetchStateForAllSystems(res))
@@ -211,6 +234,9 @@ class ADCPlatform {
       })
   }
 
+  /**
+   * Method to update state on accessories/devices.
+   */
   refreshDevices() {
     this.login()
       .then(res => fetchStateForAllSystems(res))
@@ -272,6 +298,12 @@ class ADCPlatform {
 
   // Partition Methods /////////////////////////////////////////////////////////
 
+  /**
+   * Adds necessary parameters of the alarm panel for homebridge before passing
+   * it to further setup methods.
+   *
+   * @param {Object} partition  Passed in partition object from Alarm.com
+   */
   addPartition(partition) {
     const id = partition.id
     let accessory = this.accessories[id]
@@ -304,6 +336,12 @@ class ADCPlatform {
     this.statPartitionState(accessory, partition)
   }
 
+  /**
+   * Tells homebridge there is an alarm panel, exposing it's capabilities and
+   * state.
+   *
+   * @param accessory  The accessory representing the alarm panel.
+   */
   setupPartition(accessory) {
     const id = accessory.context.accID
     const name = accessory.context.name
@@ -346,6 +384,12 @@ class ADCPlatform {
       .on('get', callback => callback(null, accessory.context.statusFault))
   }
 
+  /**
+   * Reports on the state of the alarm panel.
+   *
+   * @param accessory  The accessory representing the alarm panel.
+   * @param partition  The alarm panel parameters from Alarm.com.
+   */
   statPartitionState(accessory, partition) {
     const id = accessory.context.accID
     const name = accessory.context.name
@@ -391,6 +435,13 @@ class ADCPlatform {
     }
   }
 
+  /**
+   * Changes/sets the state of the alarm panel.
+   *
+   * @param accessory  The accessory representing the alarm panel.
+   * @param sensor  The alarm panel parameters from Alarm.com.
+   * @param callback
+   */
   changePartitionState(accessory, value, callback) {
     const id = accessory.context.accID
     let method
@@ -443,6 +494,12 @@ class ADCPlatform {
 
   // Sensor Methods ////////////////////////////////////////////////////////////
 
+  /**
+   * Adds necessary parameters to a sensor for homebridge before passing it to
+   * further setup methods.
+   *
+   * @param {Object} sensor  Passed in sensor object from Alarm.com
+   */
   addSensor(sensor) {
     const id = sensor.id
     let accessory = this.accessories[id]
@@ -487,6 +544,11 @@ class ADCPlatform {
     }
   }
 
+  /**
+   * Tells homebridge there is a sensor, exposing it's capabilities and state.
+   *
+   * @param accessory  The accessory representing a sensor
+   */
   setupSensor(accessory) {
     const id = accessory.context.accID
     const name = accessory.context.name
@@ -527,6 +589,12 @@ class ADCPlatform {
       .on('get', callback => callback(null, accessory.context.batteryLow))
   }
 
+  /**
+   * Reports on the state of the sensor accessory.
+   *
+   * @param accessory  The accessory representing a sensor.
+   * @param sensor  The sensor parameters from Alarm.com.
+   */
   statSensorState(accessory, sensor) {
     const id = accessory.context.accID
     const name = accessory.context.name
@@ -560,12 +628,17 @@ class ADCPlatform {
         .updateValue(batteryLow)
     }
   }
+  
+  /* Sensors only report state, no ability to change their state. */
+
 
   // Light Methods /////////////////////////////////////////////////////////
 
   /**
-   * Adds necessary parameters to a light for homebridge before passing it to further setup methods
-   * @param {Object} light
+   * Adds necessary parameters to a light for homebridge before passing it to
+   * further setup methods.
+   *
+   * @param {Object} light  Passed in light object from Alarm.com.
    */
   addLight(light) {
     const id = light.id
@@ -610,8 +683,9 @@ class ADCPlatform {
   }
 
   /**
-   * Adds a light to homebridge, including exposing it's capabilities and state
-   * @param accessory
+   * Tells homebridge there is a light, exposing it's capabilities and state.
+   *
+   * @param accessory  The accessory representing a light.
    */
   setupLight(accessory) {
     const id = accessory.context.accID
@@ -657,9 +731,10 @@ class ADCPlatform {
   }
 
   /**
-   * Syncs the state of an accessory (local light) and light (Alarm.com light)
-   * @param accessory The accessory representing a light
-   * @param light The light parameters from Alarm.com
+   * Reports on the state of the light accessory.
+   *
+   * @param accessory  The accessory representing the light accessory.
+   * @param light  The light accessory parameters from Alarm.com.
    */
   statLightState(accessory, light) {
     const id = accessory.context.accID
@@ -668,7 +743,7 @@ class ADCPlatform {
     const brightness = light.attributes.lightLevel
 
     if (state !== accessory.context.state) {
-      if (this.config.logLevel > 2) {
+      if (this.logLevel > 2) {
         this.log(`Updating light ${name} (${id}), state=${state}, prev=${accessory.context.state}`)
       }
 
@@ -689,10 +764,12 @@ class ADCPlatform {
   }
 
   /**
-   * Change the physical state of a light using the Alarm.com API
-   * @param accessory The light to be changed
-   * @param {boolean} value Value indicating whether the light should be turned on or off
-   * @param {number} brightness The brightness of a light, from 0-100. Only works with dimmers
+   * Change the physical state of a light using the Alarm.com API.
+   *
+   * @param accessory  The light to be changed.
+   * @param {boolean} value  Value representing off or on states of the light.
+   * @param {number} brightness  The brightness of a light, from 0-100 (only
+   *    works with dimmers).
    * @param callback
    */
   changeLightState(accessory, value, brightness, callback) {
@@ -729,6 +806,12 @@ class ADCPlatform {
 
   // Lock Methods /////////////////////////////////////////////////////////
 
+  /**
+   * Adds necessary parameters to a lock for homebridge before passing it to
+   * further setup methods.
+   *
+   * @param {Object} lock  Passed in lock object from Alarm.com.
+   */
   addLock(lock) {
     const id = lock.id
     let accessory = this.accessories[id]
@@ -769,6 +852,11 @@ class ADCPlatform {
     }
   }
 
+  /**
+   * Tells homebridge there is a lock, exposing it's capabilities and state.
+   *
+   * @param accessory  The accessory representing a lock.
+   */
   setupLock(accessory) {
     const id = accessory.context.accID
     const name = accessory.context.name
@@ -815,6 +903,12 @@ class ADCPlatform {
       .on('set', (value, callback) => this.changeLockState(accessory, value, callback))
   }
 
+  /**
+   * Reports on the state of the lock accessory.
+   *
+   * @param accessory  The accessory representing the lock accessory.
+   * @param lock  The lock accessory parameters from Alarm.com.
+   */
   statLockState(accessory, lock) {
     const id = accessory.context.accID
     const name = accessory.context.name
@@ -842,6 +936,14 @@ class ADCPlatform {
     }
   }
 
+  /**
+   * Change the physical state of a lock using the Alarm.com API.
+   *
+   * @param accessory  The lock to be changed.
+   * @param {boolean} value  Value representing locked or unlocked states of the
+   *   lock.
+   * @param callback
+   */
   changeLockState(accessory, value, callback) {
     const id = accessory.context.accID
     let method
@@ -885,6 +987,13 @@ class ADCPlatform {
 
   // Accessory Methods /////////////////////////////////////////////////////////
 
+  /**
+   * Adds accessories tp the platform, homebridge and HomeKit.
+   *
+   * @param accessory  The accessory to be added from the platform.
+   * @param type  The type of accessory.
+   * @param model  The model of the accessory.
+   */
   addAccessory(accessory, type, model) {
     const id = accessory.context.accID
     const name = accessory.context.name
@@ -897,6 +1006,12 @@ class ADCPlatform {
     this.api.registerPlatformAccessories(PLUGIN_ID, PLUGIN_NAME, [accessory])
   }
 
+
+  /**
+   * Removes accessories from the platform, homebridge and HomeKit.
+   *
+   * @param accessory  The accessory to be removed from the platform.
+   */
   removeAccessory(accessory) {
     if (!accessory) {
       return
@@ -910,6 +1025,10 @@ class ADCPlatform {
     delete this.accessories[id]
   }
 
+  /**
+   * Removes all accessories from the platform, homebridge and HomeKit.
+   * Useful for updating homebridge with the list of accessories present.
+   */
   removeAccessories() {
     this.accessories.forEach(id => this.removeAccessory(this.accessories[id]))
   }
@@ -918,17 +1037,20 @@ class ADCPlatform {
 
 /**
  * Fetches all relationships for a system from Alarm.com
- * @param res Response object from login()
- * @returns {Promise<[(number | bigint), number, number, number, number, number, number, number, number, number]>} See systemState.ts for return type
+ * 
+ * @param res  Response object from login().
+ * @returns {Promise<[(number | bigint), number, number, number, number, number,
+ *   number, number, number, number]>}  See systemState.ts for return type.
  */
 function fetchStateForAllSystems(res) {
   return Promise.all(res.systems.map(id => nodeADC.getCurrentState(id, res)))
 }
 
 /**
- * Maps an Alarm.com partition state to its nodeADC counterpart
- * @param state The state as defined by Alarm.com
- * @returns {number|*} The state as nodeADC defines it
+ * Maps an Alarm.com alarm panel state to its nodeADC counterpart.
+ *
+ * @param state  The state as defined by Alarm.com.
+ * @returns {*}  The state as nodeADC defines it.
  */
 function getPartitionState(state) {
   switch (state) {
@@ -946,9 +1068,10 @@ function getPartitionState(state) {
 }
 
 /**
- * Maps an Alarm.com lock state to its nodeADC counterpart
- * @param state The state as defined by Alarm.com
- * @returns {number|*} The state as nodeADC defines it
+ * Maps an Alarm.com sensor state to its nodeADC counterpart.
+ *
+ * @param sensor  The state as defined by Alarm.com.
+ * @returns {*}  The state as nodeADC defines it.
  */
 function getSensorState(sensor) {
   // if (sensor.attributes.description == 'Master Motion')
@@ -972,9 +1095,10 @@ function getSensorState(sensor) {
 }
 
 /**
- * Maps an Alarm.com light state to its nodeADC counterpart
- * @param state The state as defined by Alarm.com
- * @returns {number|*} The state as nodeADC defines it
+ * Maps an Alarm.com light state to its nodeADC counterpart.
+ *
+ * @param state  The state as defined by Alarm.com.
+ * @returns {number|*}  The state as nodeADC defines it.
  */
 function getLightState(state) {
   switch (state) {
@@ -988,9 +1112,10 @@ function getLightState(state) {
 }
 
 /**
- * Maps an Alarm.com sensor state to its nodeADC counterpart
- * @param sensor The state as defined by Alarm.com
- * @returns {number|*} The state as nodeADC defines it
+ * Maps an Alarm.com lock state to its nodeADC counterpart.
+ *
+ * @param state  The state as defined by Alarm.com.
+ * @returns {number|*}  The state as nodeADC defines it.
  */
 function getLockState(state) {
   switch (state) {
@@ -1003,6 +1128,12 @@ function getLockState(state) {
   }
 }
 
+/**
+ * Maps an Alarm.com sensor type to its nodeADC counterpart.
+ *
+ * @param sensor  The type as defined by Alarm.com.
+ * @returns {array}  An array with details about its type as nodeADC defines it.
+ */
 function getSensorType(sensor) {
   const state = sensor.attributes.state
 
@@ -1037,6 +1168,12 @@ function getSensorType(sensor) {
   }
 }
 
+/**
+ * Maps an Alarm.com sensor model to its type represented in homebridge.
+ *
+ * @param model  The model as reported by Alarm.com.
+ * @returns {array}  An array with homebridge service and characteristic types.
+ */
 function sensorModelToType(model) {
   switch (model) {
     case 'Contact Sensor':
