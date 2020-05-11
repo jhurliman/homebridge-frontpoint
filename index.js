@@ -1163,10 +1163,6 @@ function getSensorType(sensor) {
       return [undefined, undefined, undefined]
   }
 }
-    default:
-      return [undefined, undefined, undefined]
-  }
-}
 
 /**
  * Maps an Alarm.com sensor model to its type represented in homebridge.
