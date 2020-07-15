@@ -252,6 +252,7 @@ class ADCPlatform {
       .then(res => fetchStateForAllSystems(res))
       .then(systemStates => {
 
+          this.writePayload(this.api.user.storagePath() + '/', 'ADC-SystemStates.json', JSON.stringify(systemStates))
         systemStates.forEach(system => {
 
           if (system.partitions) {
@@ -1041,6 +1042,40 @@ class ADCPlatform {
    */
   removeAccessories() {
     this.accessories.forEach(id => this.removeAccessory(this.accessories[id]))
+  }
+
+  /**
+   * Helper function to write JSON payloads to log files for debugging and
+   * troubleshooting scenarios with specific alarm system setups.
+   *
+   * @param systemName {string}  The Name field defined in the config.
+   * @param payloadLogPath {string}  The path where the files should go.
+   * @param payloadLogName {string}  The name of the file (should end in .json).
+   * @param payload {*}  The output to populate the log file with.
+   */
+  writePayload(payloadLogPath, payloadLogName, payload) {
+    let now = new Date()
+    let formatted_datetime = now.toLocaleString()
+    let name = this.config.name
+    let prefix = '[' + formatted_datetime + '] [' + name + '] '
+
+    fs.mkdir(path.dirname(payloadLogPath), {
+      recursive: true
+    }, (err) => {
+      if (err) {
+        console.log(prefix + err)
+      } else {
+        fs.writeFile(payloadLogPath + payloadLogName, payload, {
+          flag: 'w+'
+        }, function (err) {
+          if (err) {
+            console.log(prefix + err)
+          } else {
+            console.log(prefix + payloadLogPath + payloadLogName + ' written')
+          }
+        });
+      }
+    });
   }
 
 }
