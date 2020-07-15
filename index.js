@@ -40,7 +40,7 @@ class ADCPlatform {
     this.config.authTimeoutMinutes = this.config.authTimeoutMinutes || AUTH_TIMEOUT_MINS
     this.config.pollTimeoutSeconds = this.config.pollTimeoutSeconds || POLL_TIMEOUT_SECS
 
-    this.accessories = {}
+    this.accessories = []
     this.authOpts = {
       expires: +new Date() - 1
     }
@@ -286,8 +286,8 @@ class ADCPlatform {
               this.log('No sensors found, ignore if expected, or check configuration with security system provider')
           }
 
-          if (system.light) {
-            system.light.forEach(light => {
+          if (system.lights) {
+            system.lights.forEach(light => {
               const accessory = this.accessories[light.id]
               if (!accessory) {
                 return this.addLight(lock)
