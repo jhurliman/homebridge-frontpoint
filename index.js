@@ -30,6 +30,7 @@ class ADCPlatform {
    * @param api  The homebridge API.
    */
   constructor(log, config, api) {
+
     this.log = log
     this.config = config || { platform: PLUGIN_NAME }
     this.debug = this.config.debug || false
@@ -205,8 +206,7 @@ class ADCPlatform {
       this.log(`Logging into Alarm.com as ${this.config.username}`)
     }
 
-    return nodeADC
-      .login(this.config.username, this.config.password)
+    return nodeADC.login(this.config.username, this.config.password)
       .then(authOpts => {
         // Cache login response and estimated expiration time
         authOpts.expires = +new Date() + 1000 * 60 * this.config.authTimeoutMinutes
@@ -252,7 +252,12 @@ class ADCPlatform {
       .then(res => fetchStateForAllSystems(res))
       .then(systemStates => {
 
+        // writes systemStates payload to a file for debug/troubleshooting
+        if (this.logLevel > 3) {
           this.writePayload(this.api.user.storagePath() + '/', 'ADC-SystemStates.json', JSON.stringify(systemStates))
+        }
+
+        // break out system components
         systemStates.forEach(system => {
 
           if (system.partitions) {
@@ -264,9 +269,9 @@ class ADCPlatform {
               this.statPartitionState(accessory, partition)
             })
           } else {
-            throw new Error('Alarm.com: No partitions found, check configuration with security system provider')
+            // fatal error, we require partitions and cannot continue
+            throw new Error('No partitions found, check configuration with security system provider')
           }
-          // fatal error, need to catch and report in general log output
 
           if (system.sensors) {
             system.sensors.forEach(sensor => {
@@ -276,19 +281,10 @@ class ADCPlatform {
               }
               this.statSensorState(accessory, sensor)
             })
+          } else {
+            if (this.logLevel > 2)
+              this.log('No sensors found, ignore if expected, or check configuration with security system provider')
           }
-          // need to catch and report in loglevel debug
-
-          if (system.locks) {
-            system.locks.forEach(lock => {
-              const accessory = this.accessories[lock.id]
-              if (!accessory) {
-                return this.addLock(lock)
-              }
-              this.statLockState(accessory, lock)
-            })
-          }
-          // need to catch and report in loglevel debug
 
           if (system.light) {
             system.light.forEach(light => {
@@ -298,8 +294,23 @@ class ADCPlatform {
               }
               this.statLightState(accessory, light)
             })
+          } else {
+            if (this.logLevel > 2)
+              this.log('No lights found, ignore if expected, or check configuration with security system provider')
           }
-          // need to catch and report in loglevel debug
+
+          if (system.locks) {
+            system.locks.forEach(lock => {
+              const accessory = this.accessories[lock.id]
+              if (!accessory) {
+                return this.addLock(lock)
+              }
+              this.statLockState(accessory, lock)
+            })
+          } else {
+            if (this.logLevel > 2)
+              this.log('No locks found, ignore if expected, or check configuration with security system provider')
+          }
 
         })
       })
@@ -422,8 +433,7 @@ class ADCPlatform {
 
     if (desiredState !== accessory.context.desiredState) {
       if (this.logLevel > 2) {
-        this.log(`Updating partition ${name} (${id}), desiredState=${desiredState}, prev=${accessory.context.desiredState}`
-        )
+        this.log(`Updating partition ${name} (${id}), desiredState=${desiredState}, prev=${accessory.context.desiredState}`)
       }
 
       accessory.context.desiredState = desiredState
@@ -615,6 +625,8 @@ class ADCPlatform {
     )
     const [type, characteristic, model] = getSensorType(sensor)
 
+
+
     if (state !== accessory.context.state) {
       if (this.logLevel > 2) {
         this.log(`Updating sensor ${name} (${id}), state=${state}, prev=${accessory.context.state}`)
@@ -639,7 +651,7 @@ class ADCPlatform {
         .updateValue(batteryLow)
     }
   }
-  
+
   /* Sensors only report state, no ability to change their state. */
 
 
@@ -1030,7 +1042,7 @@ class ADCPlatform {
 
     const id = accessory.context.accID
     if (this.logLevel > 2) {
-      this.log(`Removing ${accessory.context.name} (${id}) from HomeBridge.`)
+      this.log(`Removing ${accessory.context.name} (${id}) from HomeBridge`)
     }
     this.api.unregisterPlatformAccessories(PLUGIN_ID, PLUGIN_NAME, [accessory])
     delete this.accessories[id]
@@ -1098,6 +1110,7 @@ function fetchStateForAllSystems(res) {
  * @returns {*}  The state as nodeADC defines it.
  */
 function getPartitionState(state) {
+  // console.log(`${sensor.attributes.description} Sensor (${sensor.id}) is ${sensor.attributes.stateText}.`)
   switch (state) {
     case nodeADC.SYSTEM_STATES.ARMED_STAY:
       return Characteristic.SecuritySystemCurrentState.STAY_ARM
@@ -1119,8 +1132,7 @@ function getPartitionState(state) {
  * @returns {*}  The state as nodeADC defines it.
  */
 function getSensorState(sensor) {
-  // if (sensor.attributes.description == 'Master Motion')
-  // console.log(sensor)
+  // console.log(`${sensor.attributes.description} Sensor (${sensor.id}) is ${sensor.attributes.stateText}.`)
   switch (sensor.attributes.state) {
     case nodeADC.SENSOR_STATES.OPEN:
       return Characteristic.ContactSensorState.CONTACT_NOT_DETECTED
@@ -1210,7 +1222,7 @@ function getSensorType(sensor) {
 }
 
 /**
- * Maps an Alarm.com sensor model to its type represented in homebridge.
+ * Maps an Alarm.com sensor model to its type represented in homebridge/homekit.
  *
  * @param model  The model as reported by Alarm.com.
  * @returns {array}  An array with homebridge service and characteristic types.
