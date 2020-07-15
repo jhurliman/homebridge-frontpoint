@@ -36,13 +36,6 @@ class ADCPlatform {
     this.logLevel = this.config.logLevel || LOG_LEVEL
     this.ignoredDevices = this.config.ignoredDevices || []
 
-    if (!this.config.username) {
-      throw new Error('Alarm.com: Missing required username in config')
-    }
-    if (!this.config.password) {
-      throw new Error('Alarm.com: Missing required password in config')
-    }
-
     this.config.authTimeoutMinutes = this.config.authTimeoutMinutes || AUTH_TIMEOUT_MINS
     this.config.pollTimeoutSeconds = this.config.pollTimeoutSeconds || POLL_TIMEOUT_SECS
 
@@ -70,26 +63,41 @@ class ADCPlatform {
     // Overwrite default arming modes with config settings.
     if (this.config.armingModes !== undefined) {
       for (var key in this.config.armingModes) {
-        this.armingModes[key].noEntryDelay = Boolean(this.config.armingModes[key].noEntryDelay);
-        this.armingModes[key].silentArming = Boolean(this.config.armingModes[key].silentArming);
+        this.armingModes[key].noEntryDelay = Boolean(this.config.armingModes[key].noEntryDelay)
+        this.armingModes[key].silentArming = Boolean(this.config.armingModes[key].silentArming)
       }
     }
 
-    if (api) {
+    // Finally, check to see if the homebridge api is available and that the
+    // necessary config variables are present
+    if (!api && !config) {
+      return
+    } else {
       this.api = api
-      this.api.on('didFinishLaunching', this.didFinishLaunching.bind(this))
+
+      if (!this.config.username) {
+        this.log(MANUFACTURER + ': Missing required username in config')
+        return
+      }
+      if (!this.config.password) {
+        this.log(MANUFACTURER + ': Missing required password in config')
+        return
+      }
+
+      this.api.on('didFinishLaunching', this.registerAlarmSystem.bind(this))
+
     }
 
   }
 
-
   // List and Add Devices //////////////////////////////////////////////////////
 
   /**
-   * When the homebridge api finally registers the plugin, the event
-   * 'didFinishLaunching is fired, calling this method to list the devices.
+   * When the homebridge api finally registers the plugin, homebridge fires the
+   * didFinishLaunching event, which in turn, launches the following
+   * registerAlarmSystem method
    */
-  didFinishLaunching() {
+  registerAlarmSystem() {
     this.listDevices()
       .then(res => {
 
