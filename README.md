@@ -70,7 +70,7 @@ This is a drop-in replacement for Bryan Bartow's homebridge-alarm.com and John H
 * "armingModes": Object of objects with arming mode options of boolean choices (**WARNING:** the Alarm.com webAPI does not support setting silent arming to true and this feature does not work at this time)
 * "authTimeoutMinutes": Timeout to Re-Authenticate session (**WARNING:** choosing a time less than 10 minutes could possibly ban/disable your account from Alarm.com)
 * "pollTimeoutSeconds": Device polling interval (**WARNING:** choosing a time less than 60 seconds could possibly ban/disable your account from Alarm.com)
-* <details><summary>"logLevel": Adjust what gets reported in the logs <strong>(click to expand)</strong></summary><ul><li>0 = NO LOG ENTRIES</li><li>1 = ONLY ERRORS</li><li>2 = ONLY WARNINGS and ERRORS</li><li><strong>3 = GENERAL NOTICES, ERRORS and WARNINGS (default)</strong></li><li>4 = VERBOSE (everything including development output)</li></ul></details>
+* <details><summary>"logLevel": Adjust what gets reported in the logs <strong>(click to expand)</strong></summary><ul><li>0 = NO LOG ENTRIES</li><li>1 = ONLY ERRORS</li><li>2 = ONLY WARNINGS and ERRORS</li><li><strong>3 = GENERAL NOTICES, ERRORS and WARNINGS (default)</strong></li><li>4 = VERBOSE (everything including development output, this also generates a file `ADC-SystemStates.json` with the payload details from Alarm.com in the same folder as the Homebridge config.json file)</li></ul></details>
 * "ignoredDevices": An array of IDs for Alarm.com accessories you wish to hide in Homekit
 
 # Troubleshooting
