@@ -1,4 +1,6 @@
 const nodeADC = require('node-alarm-dot-com')
+const fs = require('fs')
+const path = require('path')
 
 const PLUGIN_ID = 'homebridge-node-alarm-dot-com'
 const PLUGIN_NAME = 'Alarmdotcom'

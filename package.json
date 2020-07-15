@@ -36,7 +36,7 @@
   },
   "dependencies": {
     "@oznu/homebridge-types": "0.0.4",
-    "node-alarm-dot-com": "^1.8.2",
+    "node-alarm-dot-com": "^1.8.3",
     "polling-to-event": "^2.1.0"
   }
 }
