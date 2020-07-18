@@ -6,6 +6,7 @@ Alarm.com plugin for [Homebridge](https://github.com/nfarina/homebridge) using t
 
 [![npm](https://img.shields.io/npm/dm/homebridge-node-alarm-dot-com.svg)](https://www.npmjs.com/package/homebridge-node-alarm-dot-com)
 [![npm](https://img.shields.io/npm/v/homebridge-node-alarm-dot-com.svg)](https://www.npmjs.com/package/homebridge-node-alarm-dot-com)
+[![verified-by-homebridge](https://badgen.net/badge/homebridge/verified/purple)](https://github.com/homebridge/homebridge/wiki/Verified-Plugins)
 
 This is a drop-in replacement for Bryan Bartow's homebridge-alarm.com and John Hurliman's FrontPoint plugin for Homebridge with more functionality and the removal of any external dependencies (e.g., :no_entry_sign: WrapAPI :tada: ).
 
