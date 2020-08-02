@@ -15,15 +15,17 @@ This is a drop-in replacement for Bryan Bartow's homebridge-alarm.com and John H
  * Querying panels
    * Arming
    * Disarming
- * Sensors
-   * Contact states
-   * <del>Occupancy states</del> (this does not work due to lag in the Alarm.com webAPI itself)
-   * Water Leak states
+ * Sensors (due to lag and capabilities in Alarm.com's web API, these features are partially supported)
+   * Contact sensor states
+   * Water leak sensor states
+   * Motion sensor states
  * Lights
    * On/Off switch
    * Dimmer switch
  * Locks
    * Lock/Unlock switch
+ * Garage Doors
+   * Open/Close switch
 
 # Installation
 
