@@ -1,6 +1,6 @@
 # Alarm.com plugin for Homebridge using Node.js
 
-Alarm.com plugin for [Homebridge](https://github.com/nfarina/homebridge) using the [node-alarm-dot-com](https://github.com/mkormendy/node-alarm-dot-com) interface.
+Alarm.com plugin for [Homebridge](https://github.com/nfarina/homebridge) using the [node-alarm-dot-com](https://github.com/node-alarm-dot-com/node-alarm-dot-com) interface.
 
 [![NPM](https://nodei.co/npm/homebridge-node-alarm-dot-com.png?downloads=true&downloadRank=true&stars=true)](https://nodei.co/npm/homebridge-node-alarm-dot-com/)
 
@@ -78,7 +78,7 @@ This is a drop-in replacement for Bryan Bartow's homebridge-alarm.com and John H
 
 # Troubleshooting
 
-Before assuming that something is wrong with the plugin, please review the [issues on this project's github repository](https://github.com/mkormendy/homebridge-node-alarm-dot-com/issues?utf8=%E2%9C%93&q=sort%3Aupdated-desc+) to see if there's already a similar issue reported where a solution has been proposed or the outcome is expected due to limitations with the Alarm.com web API.
+Before assuming that something is wrong with the plugin, please review the [issues on this project's github repository](https://github.com/node-alarm-dot-com/homebridge-node-alarm-dot-com/issues?utf8=%E2%9C%93&q=sort%3Aupdated-desc+) to see if there's already a similar issue reported where a solution has been proposed or the outcome is expected due to limitations with the Alarm.com web API.
 
 ### Migrating from Bryan Bartow's homebridge-alarm.com
 
