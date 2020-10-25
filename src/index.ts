@@ -1,0 +1,1435 @@
+import {
+  AccessoryConfig,
+  API,
+  CharacteristicGetCallback,
+  CharacteristicSetCallback,
+  CharacteristicValue,
+  DynamicPlatformPlugin,
+  HAP, Logger,
+  Logging, PlatformAccessory,
+  PlatformAccessoryEvent,
+  PlatformConfig
+} from 'homebridge';
+
+import nodeADC from 'node-alarm-dot-com';
+import fs from 'fs';
+import {
+  GARAGE_STATES,
+  LIGHT_STATES,
+  LOCK_STATES,
+  SENSOR_STATES,
+  SYSTEM_STATES
+} from 'node-alarm-dot-com/dist/_models/states';
+import { AuthOpts } from 'node-alarm-dot-com/dist/_models/AuthOpts';
+import path from 'path';
+
+let hap: HAP;
+const PLUGIN_ID = 'homebridge-node-alarm-dot-com';
+const PLUGIN_NAME = 'Alarmdotcom';
+const MANUFACTURER = 'Alarm.com';
+const AUTH_TIMEOUT_MINS = 10; // default for session authentication refresh
+const POLL_TIMEOUT_SECS = 60; // default for device state polling
+const LOG_LEVEL = 3; // default for log entries: 0 = NONE, 1 = ERROR, 2 = WARN, 3 = NOTICE, 4 = VERBOSE
+
+
+let Accessory: PlatformAccessory;
+let Service: HAP['Service'];
+let Characteristic: HAP['Characteristic'];
+let UUIDGen: typeof import('hap-nodejs/dist/lib/util/uuid');
+
+
+module.exports = function (homebridge: API) {
+  Accessory = homebridge.platformAccessory;
+  Service = homebridge.hap.Service;
+  Characteristic = homebridge.hap.Characteristic;
+  UUIDGen = homebridge.hap.uuid;
+
+  // TODO: Why does TS not think we need 'true'? What is 'True' for?
+  // @ts-ignore
+  homebridge.registerPlatform(PLUGIN_ID, PLUGIN_NAME, ADCPlatform, true);
+};
+
+class ADCPlatform implements DynamicPlatformPlugin {
+
+  private readonly log: Logger;
+  private readonly api: API;
+  // this is used to track restored cached accessories
+  private readonly accessories: PlatformAccessory[];
+  authOpts: AuthOpts;
+  private config: PlatformConfig;
+  private logLevel: number;
+  private armingModes: any;
+  private ignoredDevices: string[];
+  private timerID!: NodeJS.Timeout;
+
+  /**
+   * The platform class constructor used when registering a plugin.
+   *
+   * @param log  The platform's logging function.
+   * @param config  The platform's config.json section as object.
+   * @param api  The homebridge API.
+   */
+  constructor(log: Logging, config: PlatformConfig, api: API) {
+
+    this.log = log;
+    this.api = api;
+    this.config = config || { platform: PLUGIN_NAME };
+    this.logLevel = this.config.logLevel || LOG_LEVEL;
+    this.ignoredDevices = this.config.ignoredDevices || [];
+
+    this.config.authTimeoutMinutes = this.config.authTimeoutMinutes || AUTH_TIMEOUT_MINS;
+    this.config.pollTimeoutSeconds = this.config.pollTimeoutSeconds || POLL_TIMEOUT_SECS;
+
+    this.accessories = [];
+    this.authOpts = {
+      expires: +new Date() - 1
+    } as AuthOpts;
+
+    // Default arming mode options
+    this.armingModes = {
+      'away': {
+        noEntryDelay: false,
+        silentArming: false
+      },
+      'night': {
+        noEntryDelay: false,
+        silentArming: true
+      },
+      'stay': {
+        noEntryDelay: false,
+        silentArming: true
+      }
+    };
+
+    // Overwrite default arming modes with config settings.
+    if (this.config.armingModes !== undefined) {
+      for (const key in this.config.armingModes) {
+        this.armingModes[key].noEntryDelay = Boolean(this.config.armingModes[key].noEntryDelay);
+        this.armingModes[key].silentArming = Boolean(this.config.armingModes[key].silentArming);
+      }
+    }
+
+    // Finally, check to see if the homebridge api is available and that the
+    // necessary config variables are present
+    if (!api && !config) {
+      return;
+    } else {
+      this.api = api;
+
+      if (!this.config.username) {
+        this.log.error(MANUFACTURER + ': Missing required username in config');
+        return;
+      }
+      if (!this.config.password) {
+        this.log.error(MANUFACTURER + ': Missing required password in config');
+        return;
+      }
+
+      this.api.on('didFinishLaunching', this.registerAlarmSystem.bind(this));
+
+    }
+
+  }
+
+  // List and Add Devices //////////////////////////////////////////////////////
+
+  /**
+   * When the homebridge api finally registers the plugin, homebridge fires the
+   * didFinishLaunching event, which in turn, launches the following
+   * registerAlarmSystem method
+   */
+  registerAlarmSystem() {
+    this.listDevices()
+      .then(res => {
+
+        for (let device in res) {
+          if (device === 'partitions' && typeof res[device][0] == 'undefined') {
+            // throw error if no partition, ideally this should never occur
+            throw new Error(`Received no partitions from Alarm.com`);
+          } else if (res[device].length > 0) {
+            this.log.info(`Received ${res[device].length} ${device} from Alarm.com`);
+
+            res[device].forEach(d => {
+              let deviceType = d.type;
+              let realDeviceType = deviceType.split('/')[1];
+
+              if (!this.ignoredDevices.includes(d.id)) {
+                if (realDeviceType === 'partition') {
+                  this.addPartition(d);
+                } else if (realDeviceType === 'sensor') {
+                  this.addSensor(d);
+                } else if (realDeviceType === 'light') {
+                  this.addLight(d);
+                } else if (realDeviceType === 'lock') {
+                  this.addLock(d);
+                } else if (realDeviceType === 'garage-door') {
+                  this.addGarage(d);
+                }
+                // add more devices here as available, ie. garage doors, etc
+
+                this.log.info(`Added ${realDeviceType} ${d.attributes.description} (${d.id})`);
+              } else {
+                this.log.info(`Ignored sensor ${d.attributes.description} (${d.id})`);
+              }
+            });
+          } else {
+            this.log.debug(`Received no ${device} from Alarm.com. If you are expecting
+              ${device} in your Alarm.com setup, you may need to check that your
+              provider has assigned ${device} in your Alarm.com account`);
+          }
+        }
+
+      })
+      .catch(err => {
+        this.log.error(`UNHANDLED ERROR: ${err.stack}`);
+      });
+
+    // Start a timer to periodically refresh status
+    this.timerID = setInterval(() => this.refreshDevices(), this.config.pollTimeoutSeconds * 1000);
+  }
+
+  /**
+   * REQUIRED: This method is called by homebridge to instantiate the accessory
+   * from the accessory cache.
+   *
+   * @param {object} accessory  The accessory in question.
+   */
+  configureAccessory(accessory: PlatformAccessory) {
+
+    this.log.info(`Loaded from cache: ${accessory.context.name} (${accessory.context.accID})`);
+
+    const existing = this.accessories[accessory.context.accID];
+    if (existing) {
+      this.removeAccessory(existing);
+    }
+
+    if (accessory.context.partitionType) {
+      this.setupPartition(accessory);
+    } else if (accessory.context.sensorType) {
+      this.setupSensor(accessory);
+    } else {
+      this.log.warn(`Unrecognized accessory ${accessory.context.accID}`);
+    }
+
+    this.accessories[accessory.context.accID] = accessory;
+  }
+
+
+  // Internal Methods //////////////////////////////////////////////////////////
+
+  /**
+   * Method to retrieve/store/maintain login session state for the account.
+   */
+  login(): Promise<AuthOpts> {
+    // Cache expiration check
+    const now = +new Date();
+    if (this.authOpts.expires > now) {
+      return Promise.resolve(this.authOpts);
+    }
+
+    this.log.info(`Logging into Alarm.com as ${this.config.username}`);
+
+    return nodeADC.login(this.config.username, this.config.password)
+      .then((authOpts: AuthOpts) => {
+        // Cache login response and estimated expiration time
+        authOpts.expires = +new Date() + 1000 * 60 * this.config.authTimeoutMinutes;
+        this.authOpts = authOpts;
+
+        this.log.info(`Logged into Alarm.com as ${this.config.username}`);
+
+        return authOpts;
+      });
+  }
+
+  /**
+   * Method to gather devices and transform into a usable object.
+   */
+  listDevices(): Promise<any> {
+    return this.login()
+      .then(res => fetchStateForAllSystems(res))
+      .then(systemStates => {
+        return systemStates.reduce((out, system) => {
+          out.partitions = out.partitions.concat(system.partitions);
+          out.sensors = out.sensors.concat(system.sensors);
+          out.lights = out.lights.concat(system.lights);
+          out.locks = out.locks.concat(system.locks);
+          out.garages = out.garages.concat(system.garages);
+          return out;
+        }, {
+          partitions: [],
+          sensors: [],
+          lights: [],
+          locks: [],
+          garages: []
+        });
+      });
+  }
+
+  /**
+   * Method to update state on accessories/devices.
+   */
+  refreshDevices() {
+    this.login()
+      .then(res => fetchStateForAllSystems(res))
+      .then(systemStates => {
+
+        // writes systemStates payload to a file for debug/troubleshooting
+        if (this.logLevel > 3) {
+          this.writePayload(this.api.user.storagePath() + '/', 'ADC-SystemStates.json', JSON.stringify(systemStates));
+        }
+
+        // break dist system components
+        systemStates.forEach(system => {
+
+          if (system.data) {
+            system.partitions.forEach((partition: AccessoryConfig) => {
+              const accessory = this.accessories[partition.id];
+              if (!accessory) {
+                return this.addPartition(partition);
+              }
+              this.statPartitionState(accessory, partition);
+            });
+          } else {
+            // fatal error, we require partitions and cannot continue
+            throw new Error('No partitions found, check configuration with security system provider');
+          }
+
+          if (system.sensors) {
+            system.sensors.forEach((sensor: AccessoryConfig) => {
+              const accessory = this.accessories[sensor.id];
+              if (!accessory) {
+                return this.addSensor(sensor);
+              }
+              this.statSensorState(accessory, sensor);
+            });
+          } else {
+            this.log.info('No sensors found, ignore if expected, or check configuration with security system provider');
+          }
+
+          if (system.lights) {
+            system.lights.forEach((light: AccessoryConfig) => {
+              const accessory = this.accessories[light.id];
+              if (!accessory) {
+                return this.addLight(light);
+              }
+              this.statLightState(accessory, light);
+            });
+          } else {
+            this.log.info('No lights found, ignore if expected, or check configuration with security system provider');
+          }
+
+          if (system.locks) {
+            system.locks.forEach((lock: AccessoryConfig) => {
+              const accessory = this.accessories[lock.id];
+              if (!accessory) {
+                return this.addLock(lock);
+              }
+              this.statLockState(accessory, lock);
+            });
+          } else {
+            this.log.info('No locks found, ignore if expected, or check configuration with security system provider');
+          }
+
+          if (system.garages) {
+            system.garages.forEach((garage: AccessoryConfig) => {
+              const accessory = this.accessories[garage.id];
+              if (!accessory) {
+                return this.addGarage(garage);
+              }
+              this.statGarageState(accessory, garage);
+            });
+          } else {
+            this.log.info('No garage doors found, ignore if expected, or check configuration with security system provider');
+          }
+
+        });
+      })
+      .catch(err => this.log.error(err));
+  }
+
+
+  // Partition Methods /////////////////////////////////////////////////////////
+
+  /**
+   * Adds necessary parameters of the alarm panel for homebridge before passing
+   * it to further setup methods.
+   *
+   * @param {Object} partition  Passed in partition object from Alarm.com
+   */
+  addPartition(partition: AccessoryConfig) {
+    const id = partition.id;
+    let accessory = this.accessories[id];
+    if (accessory) {
+      this.removeAccessory(accessory);
+    }
+
+    const name = partition.attributes.description;
+    const uuid = UUIDGen.generate(id);
+    accessory = new Accessory(name, uuid);
+
+    accessory.context = {
+      accID: id,
+      name: name,
+      state: null,
+      desiredState: null,
+      statusFault: null,
+      partitionType: 'default'
+    };
+
+    this.log.info(`Adding partition ${name} (id=${id}, uuid=${uuid})`);
+
+    this.addAccessory(accessory, Service.SecuritySystem, 'Security Panel');
+
+    this.setupPartition(accessory);
+
+    // Set the initial partition state
+    this.statPartitionState(accessory, partition);
+  }
+
+  /**
+   * Tells homebridge there is an alarm panel, exposing it's capabilities and
+   * state.
+   *
+   * @param accessory  The accessory representing the alarm panel.
+   */
+  setupPartition(accessory: PlatformAccessory) {
+    const id = accessory.context.accID;
+    const name = accessory.context.name;
+    const model = 'Security Panel';
+
+    // Always reachable
+    accessory.reachable = true;
+
+    // Setup HomeKit accessory information
+    accessory
+      .getService(Service.AccessoryInformation)!
+      .setCharacteristic(Characteristic.Manufacturer, MANUFACTURER)
+      .setCharacteristic(Characteristic.Model, model)
+      .setCharacteristic(Characteristic.SerialNumber, id);
+
+    // Setup event listeners
+    // TODO: Why are these callbacks listed as only accepting () => void?
+    // @ts-ignore
+    accessory.on('identify', (paired, callback) => {
+      this.log.debug(`${name} identify requested, paired=${paired}`);
+
+      callback();
+    });
+
+    const service = accessory.getService(Service.SecuritySystem)!;
+
+    service
+      .getCharacteristic(Characteristic.SecuritySystemCurrentState)
+      .on('get', (callback: CharacteristicGetCallback) => callback(null, accessory.context.state));
+
+    service
+      .getCharacteristic(Characteristic.SecuritySystemTargetState)
+      .on('get', (callback: CharacteristicGetCallback) => callback(null, accessory.context.desiredState))
+      .on('set', (value: CharacteristicValue,
+                  callback: CharacteristicSetCallback) => this.changePartitionState(accessory, value, callback));
+
+    service
+      .getCharacteristic(Characteristic.StatusFault)
+      .on('get', (callback: CharacteristicGetCallback) => callback(null, accessory.context.statusFault));
+  }
+
+  /**
+   * Reports on the state of the alarm panel.
+   *
+   * @param accessory  The accessory representing the alarm panel.
+   * @param partition  The alarm panel parameters from Alarm.com.
+   */
+  statPartitionState(accessory: PlatformAccessory, partition: AccessoryConfig) {
+    const id = accessory.context.accID;
+    const name = accessory.context.name;
+    const state = getPartitionState(partition.attributes.state);
+    const desiredState = getPartitionState(partition.attributes.desiredState);
+    const statusFault = Boolean(partition.attributes.needsClearIssuesPrompt);
+
+    if (state !== accessory.context.state) {
+      this.log.debug(`Updating partition ${name} (${id}), state=${state}, prev=${accessory.context.state}`);
+
+      accessory.context.state = state;
+      accessory
+        .getService(Service.SecuritySystem)!
+        .getCharacteristic(Characteristic.SecuritySystemCurrentState)
+        .updateValue(state);
+    }
+
+    if (desiredState !== accessory.context.desiredState) {
+      this.log.info(`Updating partition ${name} (${id}), desiredState=${desiredState}, prev=${accessory.context.desiredState}`);
+
+      accessory.context.desiredState = desiredState;
+      accessory
+        .getService(Service.SecuritySystem)!
+        .getCharacteristic(Characteristic.SecuritySystemTargetState)
+        .updateValue(desiredState);
+    }
+
+    if (statusFault !== accessory.context.statusFault) {
+      this.log.info(`Updating partition ${name} (${id}), statusFault=${statusFault}, prev=${accessory.context.statusFault}`);
+
+      accessory.context.statusFault = statusFault;
+      accessory
+        .getService(Service.SecuritySystem)!
+        .getCharacteristic(Characteristic.StatusFault)
+        .updateValue(statusFault);
+    }
+  }
+
+  /**
+   * Changes/sets the state of the alarm panel.
+   *
+   * @param accessory  The accessory representing the alarm panel.
+   * @param value
+   * @param callback
+   */
+  changePartitionState(accessory: PlatformAccessory, value: CharacteristicValue, callback: CharacteristicSetCallback) {
+    const id = accessory.context.accID;
+    let method: typeof nodeADC.armAway | typeof nodeADC.armStay | typeof nodeADC.disarm;
+    const opts = {} as any;
+
+    switch (value) {
+      case Characteristic.SecuritySystemTargetState.STAY_ARM:
+        method = nodeADC.armStay;
+        opts.noEntryDelay = this.armingModes.stay.noEntryDelay;
+        opts.silentArming = this.armingModes.stay.silentArming;
+        break;
+      case Characteristic.SecuritySystemTargetState.NIGHT_ARM:
+        method = nodeADC.armStay;
+        opts.noEntryDelay = this.armingModes.night.noEntryDelay;
+        opts.silentArming = this.armingModes.night.silentArming;
+        break;
+      case Characteristic.SecuritySystemTargetState.AWAY_ARM:
+        method = nodeADC.armAway;
+        opts.noEntryDelay = this.armingModes.away.noEntryDelay;
+        opts.silentArming = this.armingModes.away.silentArming;
+        break;
+      case Characteristic.SecuritySystemTargetState.DISARM:
+        method = nodeADC.disarm;
+        break;
+      default:
+        const msg = `Can't set SecuritySystem to unknown value ${value}`;
+        this.log.warn(msg);
+        return callback(new Error(msg));
+    }
+
+    this.log.info(`changePartitionState(${accessory.context.accID}, ${value})`);
+
+    accessory.context.desiredState = value;
+
+    this.login()
+      .then(res => method(id, res, opts))
+      .then(res => res.data)
+      .then(partition => this.statPartitionState(accessory, partition))
+      .then(_ => callback()) // need to determine why we need this
+      .catch(err => {
+        this.log.error(`Error: Failed to change partition state: ${err.stack}`);
+        this.refreshDevices();
+        callback(err);
+      });
+  }
+
+  // Sensor Methods ////////////////////////////////////////////////////////////
+
+  /**
+   * Adds necessary parameters to a sensor for homebridge before passing it to
+   * further setup methods.
+   *
+   * @param {Object} sensor  Passed in sensor object from Alarm.com
+   */
+  addSensor(sensor: AccessoryConfig) {
+    const id = sensor.id;
+    let accessory = this.accessories[id];
+    // in an ideal world, homebridge shouldn't be restarted too often
+    // so upon starting we clean dist the cache of alarm accessories
+    if (accessory) {
+      this.removeAccessory(accessory);
+    }
+
+    const [type, characteristic, model] = getSensorType(sensor);
+    if (type === undefined) {
+      this.log.warn(`Warning: Sensor with unknown state ${sensor.attributes.state}`);
+
+      return;
+    }
+
+    const name = sensor.attributes.description;
+    const uuid = UUIDGen.generate(id);
+    accessory = new hap.Accessory(name, uuid);
+
+    accessory.context = {
+      accID: id,
+      name: name,
+      state: null,
+      batteryLow: false,
+      sensorType: model
+    };
+
+    // if the sensor id is not in the ignore list in the homebridge config
+    if (!this.ignoredDevices.includes(id)) {
+      this.log.info(`Adding ${model} "${name}" (id=${id}, uuid=${uuid})`);
+
+      this.addAccessory(accessory, type, model);
+      this.setupSensor(accessory);
+
+      // Set the initial sensor state
+      this.statSensorState(accessory, sensor);
+    }
+  }
+
+  /**
+   * Tells homebridge there is a sensor, exposing it's capabilities and state.
+   *
+   * @param accessory  The accessory representing a sensor
+   */
+  setupSensor(accessory: PlatformAccessory) {
+    const id = accessory.context.accID;
+    const name = accessory.context.name;
+    const model = accessory.context.sensorType;
+    const [type, characteristic] = sensorModelToType(model);
+    if (!characteristic && this.logLevel > 1) {
+      throw new Error(`Unrecognized sensor ${accessory.context.accID}`);
+    }
+
+    // Always reachable
+    accessory.reachable = true;
+
+    // Setup HomeKit accessory information
+    accessory
+      .getService(Service.AccessoryInformation)!
+      .setCharacteristic(Characteristic.Manufacturer, MANUFACTURER)
+      .setCharacteristic(Characteristic.Model, model)
+      .setCharacteristic(Characteristic.SerialNumber, id);
+
+    // Setup event listeners
+    // TODO: Why are these callbacks listed as only accepting () => void?
+    // @ts-ignore
+    accessory.on(PlatformAccessoryEvent.IDENTIFY, (paired, callback) => {
+      this.log.info(`${name} identify requested, paired=${paired}`);
+
+      callback();
+    });
+
+    const service = accessory.getService(type)!;
+
+    service
+      .getCharacteristic(characteristic)
+      .on('get', (callback: CharacteristicGetCallback) => callback(null, accessory.context.state));
+
+    service
+      .getCharacteristic(Characteristic.StatusLowBattery)
+      .on('get', (callback: CharacteristicGetCallback) => callback(null, accessory.context.batteryLow));
+  }
+
+  /**
+   * Reports on the state of the sensor accessory.
+   *
+   * @param accessory  The accessory representing a sensor.
+   * @param sensor  The sensor parameters from Alarm.com.
+   */
+  statSensorState(accessory: PlatformAccessory, sensor: AccessoryConfig) {
+    const id = accessory.context.accID;
+    const name = accessory.context.name;
+    const state = getSensorState(sensor);
+    const batteryLow = Boolean(sensor.attributes.lowBattery || sensor.attributes.criticalBattery);
+    const [type, characteristic, model] = getSensorType(sensor);
+
+
+    if (state !== accessory.context.state) {
+      this.log.info(`Updating sensor ${name} (${id}), state=${state}, prev=${accessory.context.state}`);
+
+      accessory.context.state = state;
+      accessory
+        .getService(type)!
+        .getCharacteristic(characteristic)
+        .updateValue(state);
+    }
+
+    if (batteryLow !== accessory.context.batteryLow) {
+      this.log.info(`Updating sensor ${name} (${id}), batteryLow=${batteryLow}, prev=${accessory.context.batteryLow}`);
+
+      accessory.context.batteryLow = batteryLow;
+      accessory
+        .getService(type)!
+        .getCharacteristic(Characteristic.StatusLowBattery)
+        .updateValue(batteryLow);
+    }
+  }
+
+  /* Sensors only report state, no ability to change their state. */
+
+
+  // Light Methods /////////////////////////////////////////////////////////
+
+  /**
+   * Adds necessary parameters to a light for homebridge before passing it to
+   * further setup methods.
+   *
+   * @param {Object} light  Passed in light object from Alarm.com.
+   */
+  addLight(light: AccessoryConfig) {
+    const id = light.id;
+    let accessory = this.accessories[id];
+    // in an ideal world, homebridge shouldn't be restarted too often
+    // so upon starting we clean dist the cache of alarm accessories
+    if (accessory) {
+      this.removeAccessory(accessory);
+    }
+
+    const [type, model] = [
+      Service.Lightbulb,
+      'Light'
+    ];
+
+    const name = light.attributes.description;
+    const uuid = UUIDGen.generate(id);
+    accessory = new Accessory(name, uuid);
+
+    accessory.context = {
+      accID: id,
+      name: name,
+      state: light.attributes.state,
+      desiredState: light.attributes.desiredState,
+      isDimmer: light.attributes.isDimmer,
+      lightLevel: light.attributes.lightLevel,
+      lightType: model
+    };
+
+    // if the light id is not in the ignore list in the homebridge config
+    if (!this.ignoredDevices.includes(id)) {
+      this.log.info(`Adding ${model} "${name}" (id=${id}, uuid=${uuid}) (${accessory.context.state} ${accessory.context.desiredState})`);
+
+      this.addAccessory(accessory, type, model);
+      this.setupLight(accessory);
+
+      // Set the initial light state
+      this.statLightState(accessory, light);
+    }
+  }
+
+  /**
+   * Tells homebridge there is a light, exposing it's capabilities and state.
+   *
+   * @param accessory  The accessory representing a light.
+   */
+  setupLight(accessory: PlatformAccessory) {
+    const id = accessory.context.accID;
+    const name = accessory.context.name;
+    const model = accessory.context.lightType;
+    const type = Service.Lightbulb;
+
+    // Always reachable
+    accessory.reachable = true;
+
+    // Setup HomeKit accessory information
+    accessory
+      .getService(Service.AccessoryInformation)!
+      .setCharacteristic(Characteristic.Manufacturer, MANUFACTURER)
+      .setCharacteristic(Characteristic.Model, model)
+      .setCharacteristic(Characteristic.SerialNumber, id);
+
+    // Setup event listeners
+    // TODO: Why are these callbacks listed as only accepting () => void?
+    // @ts-ignore
+    accessory.on(PlatformAccessoryEvent.IDENTIFY, (paired, callback) => {
+      this.log.info(`${name} identify requested, paired=${paired}`);
+
+      callback();
+    });
+
+    const service = accessory.getService(type)!;
+
+    service
+      .getCharacteristic(Characteristic.On)
+      .on('get', (callback: CharacteristicGetCallback) => {
+        callback(null, accessory.context.state);
+      })
+      .on('set', (value: CharacteristicValue,
+                  callback: CharacteristicSetCallback) => this.changeLightState(accessory, value, accessory.context.state, callback));
+
+    if (accessory.context.isDimmer) {
+      service
+        .getCharacteristic(Characteristic.Brightness)
+        .on('get', (callback: CharacteristicGetCallback) => callback(null, accessory.context.lightLevel))
+        .on('set', (value: CharacteristicValue,
+                    callback: CharacteristicSetCallback) => this.changeLightState(accessory, value, accessory.context.lightLevel, callback));
+    }
+  }
+
+  /**
+   * Reports on the state of the light accessory.
+   *
+   * @param accessory  The accessory representing the light accessory.
+   * @param light  The light accessory parameters from Alarm.com.
+   */
+  statLightState(accessory: PlatformAccessory, light: AccessoryConfig) {
+    const id = accessory.context.accID;
+    const name = accessory.context.name;
+    const state = getLightState(light.attributes.state);
+    const brightness = light.attributes.lightLevel;
+
+    if (state !== accessory.context.state) {
+      this.log.info(`Updating light ${name} (${id}), state=${state}, prev=${accessory.context.state}`);
+
+      accessory.context.state = state;
+
+      accessory.getService(Service.Lightbulb)!
+        .getCharacteristic(Characteristic.On)
+        .updateValue(state);
+    }
+
+    if (accessory.context.isDimmer && brightness !== accessory.context.brightness) {
+      accessory.context.brightness = brightness;
+      accessory.getService(Service.Lightbulb)!
+        .getCharacteristic(Characteristic.Brightness)
+        .updateValue(brightness);
+    }
+  }
+
+  /**
+   * Change the physical state of a light using the Alarm.com API.
+   *
+   * @param accessory  The light to be changed.
+   * @param {boolean} value  Value representing off or on states of the light.
+   * @param {number} brightness  The brightness of a light, from 0-100 (only
+   *    works with dimmers).
+   * @param callback
+   */
+  changeLightState(accessory: PlatformAccessory, value: CharacteristicValue, brightness: number,
+                   callback: CharacteristicSetCallback) {
+    const id = accessory.context.accID;
+    let method: typeof nodeADC.setLightOn | typeof nodeADC.setLightOff;
+
+    if (value === true) {
+      method = nodeADC.setLightOn;
+    } else {
+      method = nodeADC.setLightOff;
+    }
+
+    this.log.info(`Changing light (${accessory.context.accID}, ${value} light level ${brightness})`);
+
+    accessory.context.state = value;
+    accessory.context.lightLevel = brightness;
+
+    this.login()
+      .then(res => method(id, res, brightness))
+      .then(res => res.data)
+      .then(light => {
+        this.statLightState(accessory, light);
+      })
+      .then(_ => callback()) //TODO: need to determine why we need this
+      .catch(err => {
+        this.log.error(`Error: Failed to change light state: ${err.stack}`);
+        this.refreshDevices();
+        callback(err);
+      });
+  }
+
+
+  // Lock Methods /////////////////////////////////////////////////////////
+
+  /**
+   * Adds necessary parameters to a lock for homebridge before passing it to
+   * further setup methods.
+   *
+   * @param {Object} lock  Passed in lock object from Alarm.com.
+   */
+  addLock(lock: AccessoryConfig) {
+    const id = lock.id;
+    let accessory = this.accessories[id];
+    // in an ideal world, homebridge shouldn't be restarted too often
+    // so upon starting we clean dist the cache of alarm accessories
+    if (accessory) {
+      this.removeAccessory(accessory);
+    }
+
+    const [type, model] = [
+      Service.LockMechanism,
+      'Door Lock'
+    ];
+
+    const name = lock.attributes.description;
+    const uuid = UUIDGen.generate(id);
+    accessory = new Accessory(name, uuid);
+
+    accessory.context = {
+      accID: id,
+      name: name,
+      state: lock.attributes.state,
+      desiredState: lock.attributes.desiredState,
+      lockType: model
+    };
+
+    // if the lock id is not in the ignore list in the homebridge config
+    if (!this.ignoredDevices.includes(id)) {
+      this.log.info(`Adding ${model} "${name}" (id=${id}, uuid=${uuid}) (${accessory.context.state} ${accessory.context.desiredState})`);
+
+      this.addAccessory(accessory, type, model);
+      this.setupLock(accessory);
+
+      // Set the initial lock state
+      this.statLockState(accessory, lock);
+    }
+  }
+
+  /**
+   * Tells homebridge there is a lock, exposing it's capabilities and state.
+   *
+   * @param accessory  The accessory representing a lock.
+   */
+  setupLock(accessory: PlatformAccessory) {
+    const id = accessory.context.accID;
+    const name = accessory.context.name;
+    const model = accessory.context.lockType;
+    const [type, characteristic] = [
+      Service.LockMechanism,
+      Characteristic.LockCurrentState
+    ];
+    if (!characteristic && this.logLevel > 1) {
+      throw new Error(`Unrecognized lock ${accessory.context.accID}`);
+    }
+
+    // Always reachable
+    accessory.reachable = true;
+
+
+    // Setup HomeKit accessory information
+    let homeKitService = accessory.getService(Service.AccessoryInformation);
+
+    if (homeKitService == undefined) {
+      throw new Error(`Trouble getting HomeKit accessory information for ${accessory.context.accID}`);
+    }
+
+    homeKitService
+      .setCharacteristic(Characteristic.Manufacturer, MANUFACTURER)
+      .setCharacteristic(Characteristic.Model, model)
+      .setCharacteristic(Characteristic.SerialNumber, id);
+
+    // Setup event listeners
+    // @ts-ignore
+    // Todo: (paired, callback) causes troubles
+    accessory.on(PlatformAccessoryEvent.IDENTIFY, (paired, callback) => {
+      this.log.info(`${name} identify requested, paired=${paired}`);
+
+      callback();
+    });
+
+    const service = accessory.getService(type);
+
+    if (service == undefined) {
+      throw new Error(`Trouble getting service for ${accessory.context.accID}`);
+    }
+
+    service
+      .getCharacteristic(Characteristic.LockCurrentState)
+      .on('get', (callback: CharacteristicGetCallback) => {
+        callback(null, accessory.context.state);
+      });
+
+    service
+      .getCharacteristic(Characteristic.LockTargetState)
+      .on('get', (callback: CharacteristicGetCallback) => callback(null, accessory.context.desiredState))
+      .on('set', (value: CharacteristicValue,
+                  callback: CharacteristicSetCallback) => this.changeLockState(accessory, value, callback));
+  }
+
+  /**
+   * Reports on the state of the lock accessory.
+   *
+   * @param accessory  The accessory representing the lock accessory.
+   * @param lock  The lock accessory parameters from Alarm.com.
+   */
+  statLockState(accessory: PlatformAccessory, lock: AccessoryConfig) {
+    const id = accessory.context.accID;
+    const name = accessory.context.name;
+    const state = getLockState(lock.attributes.state);
+    const desiredState = getLockState(lock.attributes.desiredState);
+    const service = accessory.getService(Service.LockMechanism);
+
+    if (service == undefined) {
+      throw new Error(`Trouble getting HomeKit accessory information for ${accessory.context.accID}`);
+    }
+
+    if (state !== accessory.context.state) {
+      this.log.info(`Updating lock ${name} (${id}), state=${state}, prev=${accessory.context.state}`);
+
+      accessory.context.state = state;
+
+      service
+        .getCharacteristic(Characteristic.LockCurrentState)
+        .updateValue(state);
+    }
+
+    if (desiredState !== accessory.context.desiredState) {
+      accessory.context.desiredState = desiredState;
+      service
+        .getCharacteristic(Characteristic.LockTargetState)
+        .updateValue(desiredState);
+    }
+  }
+
+  /**
+   * Change the physical state of a lock using the Alarm.com API.
+   *
+   * @param accessory  The lock to be changed.
+   * @param {boolean} value  Value representing locked or unlocked states of the
+   *   lock.
+   * @param callback
+   */
+  changeLockState(accessory: PlatformAccessory, value: CharacteristicValue, callback: CharacteristicSetCallback) {
+    const id = accessory.context.accID;
+    let method: typeof nodeADC.setLockSecure | typeof nodeADC.setLockUnsecure;
+
+    switch (value) {
+      case Characteristic.LockTargetState.UNSECURED:
+        method = nodeADC.setLockUnsecure;
+        break;
+      case Characteristic.LockTargetState.SECURED:
+        method = nodeADC.setLockSecure;
+        break;
+      default:
+        const msg = `Can't set LockMechanism to unknown value ${value}`;
+        this.log.warn(msg);
+        return callback(new Error(msg));
+    }
+
+    this.log.info(`(un)secureLock)(${accessory.context.accID}, ${value})`);
+
+    accessory.context.desiredState = value;
+
+    this.login()
+      .then(res => method(id, res))
+      .then(res => res.data)
+      .then(lock => {
+        this.statLockState(accessory, lock);
+      })
+      .then(_ => callback())
+      .catch(err => {
+        this.log.error(`Error: Failed to change lock state: ${err.stack}`);
+        this.refreshDevices();
+        callback(err);
+      });
+  }
+
+  // Garage Methods /////////////////////////////////////////////////////////
+
+  addGarage(garage: AccessoryConfig) {
+    const id = garage.id;
+    let accessory = this.accessories[id];
+    // in an ideal world, homebridge shouldn't be restarted too often
+    // so upon starting we clean dist the cache of alarm accessories
+    if (accessory) this.removeAccessory(accessory);
+
+    const [type, model] = [
+      Service.GarageDoorOpener,
+      'Garage Door'
+    ];
+
+    const name = garage.attributes.description;
+    const uuid = UUIDGen.generate(id);
+    accessory = new Accessory(name, uuid);
+
+    accessory.context = {
+      accID: id,
+      name: name,
+      state: garage.attributes.state,
+      desiredState: garage.attributes.desiredState,
+      garageType: model
+    };
+
+    // if the garage id is not in the ignore list in the homebridge config
+    if (!this.ignoredDevices.includes(id)) {
+      this.log.info(`Adding ${model} "${name}" (id=${id}, uuid=${uuid}) (${accessory.context.state} ${accessory.context.desiredState})`);
+
+      this.addAccessory(accessory, type, model);
+      this.setupGarage(accessory);
+
+      // Set the initial garage state
+      this.statGarageState(accessory, garage);
+    }
+  }
+
+  setupGarage(accessory: PlatformAccessory) {
+    const id = accessory.context.accID;
+    const name = accessory.context.name;
+    const model = accessory.context.garageType;
+    const [type, characteristic] = [
+      Service.GarageDoorOpener,
+      Characteristic.CurrentDoorState,
+      Characteristic.TargetDoorState
+      // Characteristic.ObstructionDetected
+    ];
+
+    if (!characteristic && this.config.logLevel > 1) throw new Error(`Unrecognized garage door opener ${accessory.context.accID}`);
+
+    // Always reachable
+    accessory.reachable = true;
+
+    // Setup HomeKit accessory information
+    accessory.getService(Service.AccessoryInformation)!
+      .setCharacteristic(Characteristic.Manufacturer, MANUFACTURER)
+      .setCharacteristic(Characteristic.Model, model)
+      .setCharacteristic(Characteristic.SerialNumber, id);
+
+    // Setup event listeners
+
+    // @ts-ignore
+    // Todo: (paired, callback) causes troubles
+    accessory.on('identify', (paired, callback) => {
+      this.log.info(`${name} identify requested, paired=${paired}`);
+
+      callback();
+    });
+
+    const service = accessory.getService(type);
+
+    if (service == undefined) {
+      throw new Error(`Trouble getting HomeKit accessory information for ${accessory.context.accID}`);
+    }
+
+    service
+      .getCharacteristic(Characteristic.CurrentDoorState)
+      .on('get', (callback: CharacteristicGetCallback) => {
+        callback(null, accessory.context.state);
+      });
+
+    service
+      .getCharacteristic(Characteristic.TargetDoorState)
+      .on('get', (callback: CharacteristicGetCallback) => callback(null, accessory.context.desiredState))
+      .on('set', (value: CharacteristicValue,
+                  callback: CharacteristicSetCallback) => this.changeGarageState(accessory, value, callback));
+  }
+
+  statGarageState(accessory: PlatformAccessory, garage: AccessoryConfig) {
+    const id = accessory.context.accID;
+    const name = accessory.context.name;
+    const state = getGarageState(garage.attributes.state);
+    const desiredState = getGarageState(garage.attributes.desiredState);
+
+    if (state !== accessory.context.state) {
+      this.log.info(`Updating garage ${name} (${id}), state=${state}, prev=${accessory.context.state}`);
+
+      accessory.context.state = state;
+
+      accessory
+        .getService(Service.GarageDoorOpener)!
+        .getCharacteristic(Characteristic.CurrentDoorState)
+        .updateValue(state);
+    }
+
+    if (desiredState !== accessory.context.desiredState) {
+      accessory.context.desiredState = desiredState;
+      accessory
+        .getService(Service.GarageDoorOpener)!
+        .getCharacteristic(Characteristic.TargetDoorState)
+        .updateValue(desiredState);
+    }
+  }
+
+  /**
+   * Change the physical state of a garage using the Alarm.com API.
+   *
+   * @param accessory  The garage to be changed.
+   * @param {boolean} value  Value representing opened or closed states of the
+   *   garage.
+   * @param callback
+   */
+
+  changeGarageState(accessory: PlatformAccessory, value: CharacteristicValue, callback: CharacteristicSetCallback) {
+    const id = accessory.context.accID;
+    let method: typeof nodeADC.openGarage | typeof nodeADC.closeGarage;
+
+    this.log.debug(String(value));
+
+    switch (value) {
+      case Characteristic.TargetDoorState.OPEN:
+        method = nodeADC.openGarage;
+        break;
+      case Characteristic.TargetDoorState.CLOSED:
+        method = nodeADC.closeGarage;
+        break;
+      default:
+        const msg = `Can't set garage to unknown value ${value}`;
+        this.log.warn(msg);
+        return callback(new Error(msg));
+    }
+
+    this.log.info(`Garage Door ${accessory.context.accID}, ${value})`);
+
+    accessory.context.desiredState = value;
+
+    this.login()
+      .then(res => method(id, res)) // Usually 20-30 seconds
+      .then(res => res.data)
+      .then(garage => {
+        this.statGarageState(accessory, garage);
+      })
+      .then(_ => callback())
+      .catch(err => {
+        this.log.error(`Error: Failed to change garage state: ${err.stack}`);
+        this.refreshDevices();
+        callback(err);
+      });
+  }
+
+  // Accessory Methods /////////////////////////////////////////////////////////
+
+  /**
+   * Adds accessories to the platform, homebridge and HomeKit.
+   *
+   * @param accessory  The accessory to be added from the platform.
+   * @param type  The type of accessory.
+   * @param model  The model of the accessory.
+   */
+  addAccessory(accessory: PlatformAccessory, type: typeof Service, model: string) {
+    const id = accessory.context.accID;
+    const name = accessory.context.name;
+    this.accessories[id] = accessory;
+
+    // Setup HomeKit service
+    accessory.addService(type, name);
+
+    // Register new accessory in HomeKit
+    this.api.registerPlatformAccessories(PLUGIN_ID, PLUGIN_NAME, [accessory]);
+  }
+
+
+  /**
+   * Removes accessories from the platform, homebridge and HomeKit.
+   *
+   * @param accessory  The accessory to be removed from the platform.
+   */
+  removeAccessory(accessory?: PlatformAccessory) {
+    if (!accessory) {
+      return;
+    }
+
+    this.log.info(`Removing ${accessory.context.name} (${accessory.context.accID}) from HomeBridge`);
+    this.api.unregisterPlatformAccessories(PLUGIN_ID, PLUGIN_NAME, [accessory]);
+    delete this.accessories[this.accessories.indexOf(accessory)];
+  }
+
+  /**
+   * Removes all accessories from the platform, homebridge and HomeKit.
+   * Useful for updating homebridge with the list of accessories present.
+   */
+  removeAccessories() {
+    this.accessories.forEach(accessory => this.removeAccessory(accessory));
+  }
+
+  /**
+   * Helper function to write JSON payloads to log files for debugging and
+   * troubleshooting scenarios with specific alarm system setups.
+   *
+   * @param payloadLogPath {string}  The path where the files should go.
+   * @param payloadLogName {string}  The name of the file (should end in .json).
+   * @param payload {*}  The output to populate the log file with.
+   */
+  writePayload(payloadLogPath: string, payloadLogName: string, payload: string) {
+    let now = new Date();
+    let formatted_datetime = now.toLocaleString();
+    let name = this.config.name;
+    let prefix = '[' + formatted_datetime + '] [' + name + '] ';
+
+    fs.mkdir(path.dirname(payloadLogPath), {
+      recursive: true
+    }, (err) => {
+      if (err) {
+        console.log(prefix + err);
+      } else {
+        fs.writeFile(payloadLogPath + payloadLogName, payload, {
+          flag: 'w+'
+        }, function (err) {
+          if (err) {
+            console.log(prefix + err);
+          } else {
+            console.log(prefix + payloadLogPath + payloadLogName + ' written');
+          }
+        });
+      }
+    });
+  }
+
+}
+
+/**
+ * Fetches all relationships for a system from Alarm.com
+ *
+ * @param res  Response object from login().
+ * @returns {Promise<[(number | bigint), number, number, number, number, number,
+ *   number, number, number, number]>}  See systemState.ts for return type.
+ */
+function fetchStateForAllSystems(res: any) {
+  return Promise.all(res.map((id: string) => nodeADC.getCurrentState(id.toString(), res)));
+}
+
+/**
+ * Maps an Alarm.com alarm panel state to its nodeADC counterpart.
+ *
+ * @param state  The state as defined by Alarm.com.
+ * @returns {*}  The state as nodeADC defines it.
+ */
+function getPartitionState(state: number) {
+  // console.log(`${sensor.attributes.description} Sensor (${sensor.id}) is ${sensor.attributes.stateText}.`)
+  switch (state) {
+    case SYSTEM_STATES.ARMED_STAY:
+      return Characteristic.SecuritySystemCurrentState.STAY_ARM;
+    case SYSTEM_STATES.ARMED_AWAY:
+      return Characteristic.SecuritySystemCurrentState.AWAY_ARM;
+    case SYSTEM_STATES.ARMED_NIGHT:
+      return Characteristic.SecuritySystemCurrentState.NIGHT_ARM;
+    case SYSTEM_STATES.UNKNOWN:
+    case SYSTEM_STATES.DISARMED:
+    default:
+      return Characteristic.SecuritySystemCurrentState.DISARMED;
+  }
+}
+
+/**
+ * Maps an Alarm.com sensor state to its nodeADC counterpart.
+ *
+ * @param sensor  The state as defined by Alarm.com.
+ * @returns {*}  The state as nodeADC defines it.
+ */
+function getSensorState(sensor: AccessoryConfig): CharacteristicValue {
+  // console.log(`${sensor.attributes.description} Sensor (${sensor.id}) is ${sensor.attributes.stateText}.`)
+  switch (sensor.attributes.state) {
+    case SENSOR_STATES.OPEN:
+      return Characteristic.ContactSensorState.CONTACT_NOT_DETECTED;
+    case SENSOR_STATES.CLOSED:
+      return Characteristic.ContactSensorState.CONTACT_DETECTED;
+    case SENSOR_STATES.ACTIVE:
+      return Characteristic.OccupancyDetected.OCCUPANCY_DETECTED;
+    case SENSOR_STATES.IDLE:
+      return Characteristic.OccupancyDetected.OCCUPANCY_NOT_DETECTED;
+    case SENSOR_STATES.WET:
+      return Characteristic.LeakDetected.LEAK_DETECTED;
+    case SENSOR_STATES.DRY:
+      return Characteristic.LeakDetected.LEAK_NOT_DETECTED;
+    default:
+      return -1;
+  }
+}
+
+/**
+ * Maps an Alarm.com light state to its nodeADC counterpart.
+ *
+ * @param state  The state as defined by Alarm.com.
+ * @returns {number|*}  The state as nodeADC defines it.
+ */
+function getLightState(state: number): CharacteristicValue {
+  switch (state) {
+    case LIGHT_STATES.OFF:
+      return 0;
+    case LIGHT_STATES.ON:
+      return 1;
+    default:
+      return -1;
+  }
+}
+
+/**
+ * Maps an Alarm.com lock state to its nodeADC counterpart.
+ *
+ * @param state  The state as defined by Alarm.com.
+ * @returns {number|*}  The state as nodeADC defines it.
+ */
+function getLockState(state: number) {
+  switch (state) {
+    case LOCK_STATES.UNSECURED:
+      return Characteristic.LockCurrentState.UNSECURED;
+    case LOCK_STATES.SECURED:
+      return Characteristic.LockCurrentState.SECURED;
+    default:
+      return Characteristic.LockCurrentState.UNKNOWN;
+  }
+}
+
+/**
+ * Maps an Alarm.com garage state to its nodeADC counterpart.
+ *
+ * @param state  The state as defined by Alarm.com.
+ * @returns {number|*}  The state as nodeADC defines it.
+ */
+function getGarageState(state: number) {
+  switch (state) {
+    case GARAGE_STATES.OPEN:
+      return Characteristic.CurrentDoorState.OPEN;
+    case GARAGE_STATES.CLOSED:
+      return Characteristic.CurrentDoorState.CLOSED;
+    default:
+      return Characteristic.CurrentDoorState.STOPPED;
+  }
+}
+
+/**
+ * Maps an Alarm.com sensor type to its nodeADC counterpart.
+ *
+ * @param sensor  The type as defined by Alarm.com.
+ * @returns {array}  An array with details about its type as nodeADC defines it.
+ */
+function getSensorType(sensor: AccessoryConfig): Array<any> {
+  const state = sensor.attributes.state;
+
+  switch (state) {
+    case SENSOR_STATES.CLOSED:
+    case SENSOR_STATES.OPEN:
+      return [
+        Service.ContactSensor,
+        Characteristic.ContactSensorState,
+        'Contact Sensor'
+      ];
+    case SENSOR_STATES.IDLE:
+    case SENSOR_STATES.ACTIVE:
+      return [
+        Service.OccupancySensor,
+        Characteristic.OccupancyDetected,
+        'Occupancy Sensor'
+      ];
+    case SENSOR_STATES.DRY:
+    case SENSOR_STATES.WET:
+      return [
+        Service.LeakSensor,
+        Characteristic.LeakDetected,
+        'Leak Sensor'
+      ];
+    default:
+      return [
+        undefined,
+        undefined,
+        undefined
+      ];
+  }
+}
+
+/**
+ * Maps an Alarm.com sensor model to its type represented in homebridge/homekit.
+ *
+ * @param model  The model as reported by Alarm.com.
+ * @returns {array}  An array with homebridge service and characteristic types.
+ */
+function sensorModelToType(model: string): Array<any> {
+  switch (model) {
+    case 'Contact Sensor':
+      return [
+        Service.ContactSensor,
+        Characteristic.ContactSensorState
+      ];
+    case 'Occupancy Sensor':
+      return [
+        Service.OccupancySensor,
+        Characteristic.OccupancyDetected
+      ];
+    case 'Leak Sensor':
+      return [
+        Service.LeakSensor,
+        Characteristic.LeakDetected
+      ];
+    default:
+      return [
+        undefined,
+        undefined
+      ];
+  }
+}

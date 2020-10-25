@@ -26,8 +26,17 @@
   "bugs": {
     "url": "https://github.com/mkormendy/homebridge-node-alarm-dot-com/issues"
   },
-  "main": "index.js",
+  "main": "dist/index.js",
+  "files": [
+    "LICENSE",
+    "dist"
+  ],
   "scripts": {
+    "clean": "rimraf ./dist",
+    "build": "rimraf ./dist && tsc",
+    "prepublishOnly": "npm run build",
+    "postpublish": "npm run clean",
+    "start": "ts-node src/index.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "engines": {
@@ -35,8 +44,14 @@
     "homebridge": ">=0.4.21"
   },
   "dependencies": {
-    "@oznu/homebridge-types": "0.0.4",
-    "node-alarm-dot-com": "latest",
+    "node-alarm-dot-com": "file:../node-alarm-dot-com",
     "polling-to-event": "^2.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^14.0.27",
+    "homebridge": "^1.1.2",
+    "rimraf": "^3.0.2",
+    "typescript": "^3.9.7",
+    "ts-node": "^8.10.2"
   }
 }
