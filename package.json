@@ -44,7 +44,7 @@
     "homebridge": ">=0.4.21"
   },
   "dependencies": {
-    "node-alarm-dot-com": "file:../node-alarm-dot-com",
+    "node-alarm-dot-com": "latest",
     "polling-to-event": "^2.1.0"
   },
   "devDependencies": {

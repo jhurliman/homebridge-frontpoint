@@ -1,6 +1,5 @@
 import {
-  AccessoryConfig,
-  API,
+  API, APIEvent,
   CharacteristicGetCallback,
   CharacteristicSetCallback,
   CharacteristicValue,
@@ -11,8 +10,18 @@ import {
   PlatformConfig
 } from 'homebridge';
 
-import nodeADC from 'node-alarm-dot-com';
 import fs from 'fs';
+import {
+  armAway,
+  armStay,
+  closeGarage,
+  disarm, getCurrentState,
+  login,
+  openGarage,
+  setLightOff, setLightOn,
+  setLockSecure, setLockUnsecure
+} from 'node-alarm-dot-com';
+import { LightState, LockState, SensorState } from 'node-alarm-dot-com/dist/_models/DeviceStates';
 import {
   GARAGE_STATES,
   LIGHT_STATES,
@@ -21,6 +30,7 @@ import {
   SYSTEM_STATES
 } from 'node-alarm-dot-com/dist/_models/states';
 import { AuthOpts } from 'node-alarm-dot-com/dist/_models/AuthOpts';
+import { FlattenedSystemState } from 'node-alarm-dot-com/dist/_models/systemState';
 import path from 'path';
 
 let hap: HAP;
@@ -32,21 +42,22 @@ const POLL_TIMEOUT_SECS = 60; // default for device state polling
 const LOG_LEVEL = 3; // default for log entries: 0 = NONE, 1 = ERROR, 2 = WARN, 3 = NOTICE, 4 = VERBOSE
 
 
-let Accessory: PlatformAccessory;
+let Accessory: typeof PlatformAccessory;
 let Service: HAP['Service'];
 let Characteristic: HAP['Characteristic'];
 let UUIDGen: typeof import('hap-nodejs/dist/lib/util/uuid');
 
 
-module.exports = function (homebridge: API) {
-  Accessory = homebridge.platformAccessory;
-  Service = homebridge.hap.Service;
-  Characteristic = homebridge.hap.Characteristic;
-  UUIDGen = homebridge.hap.uuid;
+export = (api: API) => {
+  hap = api.hap;
+  Accessory = api.platformAccessory;
+  Service = api.hap.Service;
+  Characteristic = api.hap.Characteristic;
+  UUIDGen = api.hap.uuid;
 
   // TODO: Why does TS not think we need 'true'? What is 'True' for?
   // @ts-ignore
-  homebridge.registerPlatform(PLUGIN_ID, PLUGIN_NAME, ADCPlatform, true);
+  api.registerPlatform(PLUGIN_ID, PLUGIN_NAME, ADCPlatform, true);
 };
 
 class ADCPlatform implements DynamicPlatformPlugin {
@@ -70,7 +81,6 @@ class ADCPlatform implements DynamicPlatformPlugin {
    * @param api  The homebridge API.
    */
   constructor(log: Logging, config: PlatformConfig, api: API) {
-
     this.log = log;
     this.api = api;
     this.config = config || { platform: PLUGIN_NAME };
@@ -125,10 +135,8 @@ class ADCPlatform implements DynamicPlatformPlugin {
         return;
       }
 
-      this.api.on('didFinishLaunching', this.registerAlarmSystem.bind(this));
-
+      this.api.on(APIEvent.DID_FINISH_LAUNCHING, this.registerAlarmSystem.bind(this));
     }
-
   }
 
   // List and Add Devices //////////////////////////////////////////////////////
@@ -141,7 +149,6 @@ class ADCPlatform implements DynamicPlatformPlugin {
   registerAlarmSystem() {
     this.listDevices()
       .then(res => {
-
         for (let device in res) {
           if (device === 'partitions' && typeof res[device][0] == 'undefined') {
             // throw error if no partition, ideally this should never occur
@@ -229,7 +236,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
     this.log.info(`Logging into Alarm.com as ${this.config.username}`);
 
-    return nodeADC.login(this.config.username, this.config.password)
+    return login(this.config.username, this.config.password)
       .then((authOpts: AuthOpts) => {
         // Cache login response and estimated expiration time
         authOpts.expires = +new Date() + 1000 * 60 * this.config.authTimeoutMinutes;
@@ -281,8 +288,8 @@ class ADCPlatform implements DynamicPlatformPlugin {
         // break dist system components
         systemStates.forEach(system => {
 
-          if (system.data) {
-            system.partitions.forEach((partition: AccessoryConfig) => {
+          if (system.partitions) {
+            system.partitions.forEach((partition) => {
               const accessory = this.accessories[partition.id];
               if (!accessory) {
                 return this.addPartition(partition);
@@ -295,7 +302,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
           }
 
           if (system.sensors) {
-            system.sensors.forEach((sensor: AccessoryConfig) => {
+            system.sensors.forEach((sensor) => {
               const accessory = this.accessories[sensor.id];
               if (!accessory) {
                 return this.addSensor(sensor);
@@ -307,7 +314,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
           }
 
           if (system.lights) {
-            system.lights.forEach((light: AccessoryConfig) => {
+            system.lights.forEach((light) => {
               const accessory = this.accessories[light.id];
               if (!accessory) {
                 return this.addLight(light);
@@ -319,7 +326,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
           }
 
           if (system.locks) {
-            system.locks.forEach((lock: AccessoryConfig) => {
+            system.locks.forEach((lock) => {
               const accessory = this.accessories[lock.id];
               if (!accessory) {
                 return this.addLock(lock);
@@ -331,7 +338,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
           }
 
           if (system.garages) {
-            system.garages.forEach((garage: AccessoryConfig) => {
+            system.garages.forEach((garage) => {
               const accessory = this.accessories[garage.id];
               if (!accessory) {
                 return this.addGarage(garage);
@@ -356,7 +363,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
    *
    * @param {Object} partition  Passed in partition object from Alarm.com
    */
-  addPartition(partition: AccessoryConfig) {
+  addPartition(partition) {
     const id = partition.id;
     let accessory = this.accessories[id];
     if (accessory) {
@@ -439,7 +446,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
    * @param accessory  The accessory representing the alarm panel.
    * @param partition  The alarm panel parameters from Alarm.com.
    */
-  statPartitionState(accessory: PlatformAccessory, partition: AccessoryConfig) {
+  statPartitionState(accessory: PlatformAccessory, partition) {
     const id = accessory.context.accID;
     const name = accessory.context.name;
     const state = getPartitionState(partition.attributes.state);
@@ -486,27 +493,27 @@ class ADCPlatform implements DynamicPlatformPlugin {
    */
   changePartitionState(accessory: PlatformAccessory, value: CharacteristicValue, callback: CharacteristicSetCallback) {
     const id = accessory.context.accID;
-    let method: typeof nodeADC.armAway | typeof nodeADC.armStay | typeof nodeADC.disarm;
+    let method: typeof armAway | typeof armStay | typeof disarm;
     const opts = {} as any;
 
     switch (value) {
       case Characteristic.SecuritySystemTargetState.STAY_ARM:
-        method = nodeADC.armStay;
+        method = armStay;
         opts.noEntryDelay = this.armingModes.stay.noEntryDelay;
         opts.silentArming = this.armingModes.stay.silentArming;
         break;
       case Characteristic.SecuritySystemTargetState.NIGHT_ARM:
-        method = nodeADC.armStay;
+        method = armStay;
         opts.noEntryDelay = this.armingModes.night.noEntryDelay;
         opts.silentArming = this.armingModes.night.silentArming;
         break;
       case Characteristic.SecuritySystemTargetState.AWAY_ARM:
-        method = nodeADC.armAway;
+        method = armAway;
         opts.noEntryDelay = this.armingModes.away.noEntryDelay;
         opts.silentArming = this.armingModes.away.silentArming;
         break;
       case Characteristic.SecuritySystemTargetState.DISARM:
-        method = nodeADC.disarm;
+        method = disarm;
         break;
       default:
         const msg = `Can't set SecuritySystem to unknown value ${value}`;
@@ -538,7 +545,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
    *
    * @param {Object} sensor  Passed in sensor object from Alarm.com
    */
-  addSensor(sensor: AccessoryConfig) {
+  addSensor(sensor: SensorState) {
     const id = sensor.id;
     let accessory = this.accessories[id];
     // in an ideal world, homebridge shouldn't be restarted too often
@@ -556,7 +563,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
     const name = sensor.attributes.description;
     const uuid = UUIDGen.generate(id);
-    accessory = new hap.Accessory(name, uuid);
+    accessory = new Accessory(name, uuid);
 
     accessory.context = {
       accID: id,
@@ -628,7 +635,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
    * @param accessory  The accessory representing a sensor.
    * @param sensor  The sensor parameters from Alarm.com.
    */
-  statSensorState(accessory: PlatformAccessory, sensor: AccessoryConfig) {
+  statSensorState(accessory: PlatformAccessory, sensor: SensorState) {
     const id = accessory.context.accID;
     const name = accessory.context.name;
     const state = getSensorState(sensor);
@@ -668,7 +675,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
    *
    * @param {Object} light  Passed in light object from Alarm.com.
    */
-  addLight(light: AccessoryConfig) {
+  addLight(light) {
     const id = light.id;
     let accessory = this.accessories[id];
     // in an ideal world, homebridge shouldn't be restarted too often
@@ -763,7 +770,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
    * @param accessory  The accessory representing the light accessory.
    * @param light  The light accessory parameters from Alarm.com.
    */
-  statLightState(accessory: PlatformAccessory, light: AccessoryConfig) {
+  statLightState(accessory: PlatformAccessory, light: LightState) {
     const id = accessory.context.accID;
     const name = accessory.context.name;
     const state = getLightState(light.attributes.state);
@@ -799,12 +806,12 @@ class ADCPlatform implements DynamicPlatformPlugin {
   changeLightState(accessory: PlatformAccessory, value: CharacteristicValue, brightness: number,
                    callback: CharacteristicSetCallback) {
     const id = accessory.context.accID;
-    let method: typeof nodeADC.setLightOn | typeof nodeADC.setLightOff;
+    let method: typeof setLightOn | typeof setLightOff;
 
     if (value === true) {
-      method = nodeADC.setLightOn;
+      method = setLightOn;
     } else {
-      method = nodeADC.setLightOff;
+      method = setLightOff;
     }
 
     this.log.info(`Changing light (${accessory.context.accID}, ${value} light level ${brightness})`);
@@ -835,7 +842,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
    *
    * @param {Object} lock  Passed in lock object from Alarm.com.
    */
-  addLock(lock: AccessoryConfig) {
+  addLock(lock) {
     const id = lock.id;
     let accessory = this.accessories[id];
     // in an ideal world, homebridge shouldn't be restarted too often
@@ -940,7 +947,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
    * @param accessory  The accessory representing the lock accessory.
    * @param lock  The lock accessory parameters from Alarm.com.
    */
-  statLockState(accessory: PlatformAccessory, lock: AccessoryConfig) {
+  statLockState(accessory: PlatformAccessory, lock: LockState) {
     const id = accessory.context.accID;
     const name = accessory.context.name;
     const state = getLockState(lock.attributes.state);
@@ -979,14 +986,14 @@ class ADCPlatform implements DynamicPlatformPlugin {
    */
   changeLockState(accessory: PlatformAccessory, value: CharacteristicValue, callback: CharacteristicSetCallback) {
     const id = accessory.context.accID;
-    let method: typeof nodeADC.setLockSecure | typeof nodeADC.setLockUnsecure;
+    let method: typeof setLockSecure | typeof setLockUnsecure;
 
     switch (value) {
       case Characteristic.LockTargetState.UNSECURED:
-        method = nodeADC.setLockUnsecure;
+        method = setLockUnsecure;
         break;
       case Characteristic.LockTargetState.SECURED:
-        method = nodeADC.setLockSecure;
+        method = setLockSecure;
         break;
       default:
         const msg = `Can't set LockMechanism to unknown value ${value}`;
@@ -1014,7 +1021,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
   // Garage Methods /////////////////////////////////////////////////////////
 
-  addGarage(garage: AccessoryConfig) {
+  addGarage(garage) {
     const id = garage.id;
     let accessory = this.accessories[id];
     // in an ideal world, homebridge shouldn't be restarted too often
@@ -1101,7 +1108,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
                   callback: CharacteristicSetCallback) => this.changeGarageState(accessory, value, callback));
   }
 
-  statGarageState(accessory: PlatformAccessory, garage: AccessoryConfig) {
+  statGarageState(accessory: PlatformAccessory, garage) {
     const id = accessory.context.accID;
     const name = accessory.context.name;
     const state = getGarageState(garage.attributes.state);
@@ -1138,16 +1145,16 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
   changeGarageState(accessory: PlatformAccessory, value: CharacteristicValue, callback: CharacteristicSetCallback) {
     const id = accessory.context.accID;
-    let method: typeof nodeADC.openGarage | typeof nodeADC.closeGarage;
+    let method: typeof openGarage | typeof closeGarage;
 
     this.log.debug(String(value));
 
     switch (value) {
       case Characteristic.TargetDoorState.OPEN:
-        method = nodeADC.openGarage;
+        method = openGarage;
         break;
       case Characteristic.TargetDoorState.CLOSED:
-        method = nodeADC.closeGarage;
+        method = closeGarage;
         break;
       default:
         const msg = `Can't set garage to unknown value ${value}`;
@@ -1260,15 +1267,15 @@ class ADCPlatform implements DynamicPlatformPlugin {
  * @returns {Promise<[(number | bigint), number, number, number, number, number,
  *   number, number, number, number]>}  See systemState.ts for return type.
  */
-function fetchStateForAllSystems(res: any) {
-  return Promise.all(res.map((id: string) => nodeADC.getCurrentState(id.toString(), res)));
+function fetchStateForAllSystems(res: AuthOpts): Promise<FlattenedSystemState[]> {
+  return Promise.all(res.systems.map((id: string) => getCurrentState(id.toString(), res)));
 }
 
 /**
- * Maps an Alarm.com alarm panel state to its nodeADC counterpart.
+ * Maps an Alarm.com alarm panel state to its counterpart.
  *
  * @param state  The state as defined by Alarm.com.
- * @returns {*}  The state as nodeADC defines it.
+ * @returns {*}  The state as defines it.
  */
 function getPartitionState(state: number) {
   // console.log(`${sensor.attributes.description} Sensor (${sensor.id}) is ${sensor.attributes.stateText}.`)
@@ -1287,12 +1294,12 @@ function getPartitionState(state: number) {
 }
 
 /**
- * Maps an Alarm.com sensor state to its nodeADC counterpart.
+ * Maps an Alarm.com sensor state to its counterpart.
  *
  * @param sensor  The state as defined by Alarm.com.
- * @returns {*}  The state as nodeADC defines it.
+ * @returns {*}  The state as defines it.
  */
-function getSensorState(sensor: AccessoryConfig): CharacteristicValue {
+function getSensorState(sensor: SensorState): CharacteristicValue {
   // console.log(`${sensor.attributes.description} Sensor (${sensor.id}) is ${sensor.attributes.stateText}.`)
   switch (sensor.attributes.state) {
     case SENSOR_STATES.OPEN:
@@ -1313,10 +1320,10 @@ function getSensorState(sensor: AccessoryConfig): CharacteristicValue {
 }
 
 /**
- * Maps an Alarm.com light state to its nodeADC counterpart.
+ * Maps an Alarm.com light state to its counterpart.
  *
  * @param state  The state as defined by Alarm.com.
- * @returns {number|*}  The state as nodeADC defines it.
+ * @returns {number|*}  The state as defines it.
  */
 function getLightState(state: number): CharacteristicValue {
   switch (state) {
@@ -1330,10 +1337,10 @@ function getLightState(state: number): CharacteristicValue {
 }
 
 /**
- * Maps an Alarm.com lock state to its nodeADC counterpart.
+ * Maps an Alarm.com lock state to its counterpart.
  *
  * @param state  The state as defined by Alarm.com.
- * @returns {number|*}  The state as nodeADC defines it.
+ * @returns {number|*}  The state as defines it.
  */
 function getLockState(state: number) {
   switch (state) {
@@ -1347,10 +1354,10 @@ function getLockState(state: number) {
 }
 
 /**
- * Maps an Alarm.com garage state to its nodeADC counterpart.
+ * Maps an Alarm.com garage state to its counterpart.
  *
  * @param state  The state as defined by Alarm.com.
- * @returns {number|*}  The state as nodeADC defines it.
+ * @returns {number|*}  The state as defines it.
  */
 function getGarageState(state: number) {
   switch (state) {
@@ -1364,12 +1371,12 @@ function getGarageState(state: number) {
 }
 
 /**
- * Maps an Alarm.com sensor type to its nodeADC counterpart.
+ * Maps an Alarm.com sensor type to its counterpart.
  *
  * @param sensor  The type as defined by Alarm.com.
- * @returns {array}  An array with details about its type as nodeADC defines it.
+ * @returns {array}  An array with details about its type as defines it.
  */
-function getSensorType(sensor: AccessoryConfig): Array<any> {
+function getSensorType(sensor: SensorState): Array<any> {
   const state = sensor.attributes.state;
 
   switch (state) {
