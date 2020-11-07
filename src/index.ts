@@ -21,7 +21,7 @@ import {
   setLightOff, setLightOn,
   setLockSecure, setLockUnsecure
 } from 'node-alarm-dot-com';
-import { LightState, LockState, SensorState } from 'node-alarm-dot-com/dist/_models/DeviceStates';
+import { GarageState, LightState, LockState, SensorState } from 'node-alarm-dot-com/dist/_models/DeviceStates';
 import {
   GARAGE_STATES,
   LIGHT_STATES,
@@ -491,7 +491,8 @@ class ADCPlatform implements DynamicPlatformPlugin {
    * @param value
    * @param callback
    */
-  changePartitionState(accessory: PlatformAccessory, value: CharacteristicValue, callback: CharacteristicSetCallback) {
+  changePartitionState(accessory: PlatformAccessory, value: CharacteristicValue,
+                       callback: CharacteristicSetCallback): void {
     const id = accessory.context.accID;
     let method: typeof armAway | typeof armStay | typeof disarm;
     const opts = {} as any;
@@ -545,7 +546,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
    *
    * @param {Object} sensor  Passed in sensor object from Alarm.com
    */
-  addSensor(sensor: SensorState) {
+  addSensor(sensor: SensorState): void {
     const id = sensor.id;
     let accessory = this.accessories[id];
     // in an ideal world, homebridge shouldn't be restarted too often
@@ -590,7 +591,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
    *
    * @param accessory  The accessory representing a sensor
    */
-  setupSensor(accessory: PlatformAccessory) {
+  setupSensor(accessory: PlatformAccessory): void {
     const id = accessory.context.accID;
     const name = accessory.context.name;
     const model = accessory.context.sensorType;
@@ -635,7 +636,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
    * @param accessory  The accessory representing a sensor.
    * @param sensor  The sensor parameters from Alarm.com.
    */
-  statSensorState(accessory: PlatformAccessory, sensor: SensorState) {
+  statSensorState(accessory: PlatformAccessory, sensor: SensorState): void {
     const id = accessory.context.accID;
     const name = accessory.context.name;
     const state = getSensorState(sensor);
@@ -675,7 +676,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
    *
    * @param {Object} light  Passed in light object from Alarm.com.
    */
-  addLight(light) {
+  addLight(light: LightState): void {
     const id = light.id;
     let accessory = this.accessories[id];
     // in an ideal world, homebridge shouldn't be restarted too often
@@ -720,7 +721,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
    *
    * @param accessory  The accessory representing a light.
    */
-  setupLight(accessory: PlatformAccessory) {
+  setupLight(accessory: PlatformAccessory): void {
     const id = accessory.context.accID;
     const name = accessory.context.name;
     const model = accessory.context.lightType;
@@ -770,7 +771,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
    * @param accessory  The accessory representing the light accessory.
    * @param light  The light accessory parameters from Alarm.com.
    */
-  statLightState(accessory: PlatformAccessory, light: LightState) {
+  statLightState(accessory: PlatformAccessory, light: LightState): void {
     const id = accessory.context.accID;
     const name = accessory.context.name;
     const state = getLightState(light.attributes.state);
@@ -804,7 +805,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
    * @param callback
    */
   changeLightState(accessory: PlatformAccessory, value: CharacteristicValue, brightness: number,
-                   callback: CharacteristicSetCallback) {
+                   callback: CharacteristicSetCallback): void {
     const id = accessory.context.accID;
     let method: typeof setLightOn | typeof setLightOff;
 
@@ -842,7 +843,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
    *
    * @param {Object} lock  Passed in lock object from Alarm.com.
    */
-  addLock(lock) {
+  addLock(lock: LockState): void {
     const id = lock.id;
     let accessory = this.accessories[id];
     // in an ideal world, homebridge shouldn't be restarted too often
@@ -885,7 +886,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
    *
    * @param accessory  The accessory representing a lock.
    */
-  setupLock(accessory: PlatformAccessory) {
+  setupLock(accessory: PlatformAccessory): void {
     const id = accessory.context.accID;
     const name = accessory.context.name;
     const model = accessory.context.lockType;
@@ -947,7 +948,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
    * @param accessory  The accessory representing the lock accessory.
    * @param lock  The lock accessory parameters from Alarm.com.
    */
-  statLockState(accessory: PlatformAccessory, lock: LockState) {
+  statLockState(accessory: PlatformAccessory, lock: LockState): void {
     const id = accessory.context.accID;
     const name = accessory.context.name;
     const state = getLockState(lock.attributes.state);
@@ -984,7 +985,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
    *   lock.
    * @param callback
    */
-  changeLockState(accessory: PlatformAccessory, value: CharacteristicValue, callback: CharacteristicSetCallback) {
+  changeLockState(accessory: PlatformAccessory, value: CharacteristicValue, callback: CharacteristicSetCallback): void {
     const id = accessory.context.accID;
     let method: typeof setLockSecure | typeof setLockUnsecure;
 
@@ -1021,7 +1022,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
   // Garage Methods /////////////////////////////////////////////////////////
 
-  addGarage(garage) {
+  addGarage(garage: GarageState): void {
     const id = garage.id;
     let accessory = this.accessories[id];
     // in an ideal world, homebridge shouldn't be restarted too often
@@ -1057,7 +1058,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
     }
   }
 
-  setupGarage(accessory: PlatformAccessory) {
+  setupGarage(accessory: PlatformAccessory): void {
     const id = accessory.context.accID;
     const name = accessory.context.name;
     const model = accessory.context.garageType;
@@ -1108,7 +1109,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
                   callback: CharacteristicSetCallback) => this.changeGarageState(accessory, value, callback));
   }
 
-  statGarageState(accessory: PlatformAccessory, garage) {
+  statGarageState(accessory: PlatformAccessory, garage: GarageState): void {
     const id = accessory.context.accID;
     const name = accessory.context.name;
     const state = getGarageState(garage.attributes.state);
@@ -1143,7 +1144,8 @@ class ADCPlatform implements DynamicPlatformPlugin {
    * @param callback
    */
 
-  changeGarageState(accessory: PlatformAccessory, value: CharacteristicValue, callback: CharacteristicSetCallback) {
+  changeGarageState(accessory: PlatformAccessory, value: CharacteristicValue,
+                    callback: CharacteristicSetCallback): void {
     const id = accessory.context.accID;
     let method: typeof openGarage | typeof closeGarage;
 
@@ -1189,7 +1191,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
    * @param type  The type of accessory.
    * @param model  The model of the accessory.
    */
-  addAccessory(accessory: PlatformAccessory, type: typeof Service, model: string) {
+  addAccessory(accessory: PlatformAccessory, type: typeof Service, model: string): void {
     const id = accessory.context.accID;
     const name = accessory.context.name;
     this.accessories[id] = accessory;
@@ -1207,7 +1209,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
    *
    * @param accessory  The accessory to be removed from the platform.
    */
-  removeAccessory(accessory?: PlatformAccessory) {
+  removeAccessory(accessory?: PlatformAccessory): void {
     if (!accessory) {
       return;
     }
@@ -1221,7 +1223,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
    * Removes all accessories from the platform, homebridge and HomeKit.
    * Useful for updating homebridge with the list of accessories present.
    */
-  removeAccessories() {
+  removeAccessories(): void {
     this.accessories.forEach(accessory => this.removeAccessory(accessory));
   }
 
@@ -1233,7 +1235,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
    * @param payloadLogName {string}  The name of the file (should end in .json).
    * @param payload {*}  The output to populate the log file with.
    */
-  writePayload(payloadLogPath: string, payloadLogName: string, payload: string) {
+  writePayload(payloadLogPath: string, payloadLogName: string, payload: string): void {
     let now = new Date();
     let formatted_datetime = now.toLocaleString();
     let name = this.config.name;
@@ -1265,7 +1267,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
  *
  * @param res  Response object from login().
  * @returns {Promise<[(number | bigint), number, number, number, number, number,
- *   number, number, number, number]>}  See systemState.ts for return type.
+ *   number, number, number, number]>}  See SystemState.ts for return type.
  */
 function fetchStateForAllSystems(res: AuthOpts): Promise<FlattenedSystemState[]> {
   return Promise.all(res.systems.map((id: string) => getCurrentState(id.toString(), res)));
@@ -1277,7 +1279,7 @@ function fetchStateForAllSystems(res: AuthOpts): Promise<FlattenedSystemState[]>
  * @param state  The state as defined by Alarm.com.
  * @returns {*}  The state as defines it.
  */
-function getPartitionState(state: number) {
+function getPartitionState(state: number): number {
   // console.log(`${sensor.attributes.description} Sensor (${sensor.id}) is ${sensor.attributes.stateText}.`)
   switch (state) {
     case SYSTEM_STATES.ARMED_STAY:
@@ -1374,7 +1376,7 @@ function getGarageState(state: number) {
  * Maps an Alarm.com sensor type to its counterpart.
  *
  * @param sensor  The type as defined by Alarm.com.
- * @returns {array}  An array with details about its type as defines it.
+ * @returns {}  An array with details about its type as defines it.
  */
 function getSensorType(sensor: SensorState): Array<any> {
   const state = sensor.attributes.state;
