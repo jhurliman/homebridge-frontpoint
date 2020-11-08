@@ -404,9 +404,6 @@ class ADCPlatform implements DynamicPlatformPlugin {
     const name = accessory.context.name;
     const model = 'Security Panel';
 
-    // Always reachable
-    accessory.reachable = true;
-
     // Setup HomeKit accessory information
     accessory
       .getService(Service.AccessoryInformation)!
@@ -600,9 +597,6 @@ class ADCPlatform implements DynamicPlatformPlugin {
       throw new Error(`Unrecognized sensor ${accessory.context.accID}`);
     }
 
-    // Always reachable
-    accessory.reachable = true;
-
     // Setup HomeKit accessory information
     accessory
       .getService(Service.AccessoryInformation)!
@@ -726,9 +720,6 @@ class ADCPlatform implements DynamicPlatformPlugin {
     const name = accessory.context.name;
     const model = accessory.context.lightType;
     const type = Service.Lightbulb;
-
-    // Always reachable
-    accessory.reachable = true;
 
     // Setup HomeKit accessory information
     accessory
@@ -898,10 +889,6 @@ class ADCPlatform implements DynamicPlatformPlugin {
       throw new Error(`Unrecognized lock ${accessory.context.accID}`);
     }
 
-    // Always reachable
-    accessory.reachable = true;
-
-
     // Setup HomeKit accessory information
     let homeKitService = accessory.getService(Service.AccessoryInformation);
 
@@ -1070,9 +1057,6 @@ class ADCPlatform implements DynamicPlatformPlugin {
     ];
 
     if (!characteristic && this.config.logLevel > 1) throw new Error(`Unrecognized garage door opener ${accessory.context.accID}`);
-
-    // Always reachable
-    accessory.reachable = true;
 
     // Setup HomeKit accessory information
     accessory.getService(Service.AccessoryInformation)!
