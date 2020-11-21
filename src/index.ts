@@ -21,16 +21,16 @@ import {
   setLightOff, setLightOn,
   setLockSecure, setLockUnsecure
 } from 'node-alarm-dot-com';
-import { GarageState, LightState, LockState, SensorState } from 'node-alarm-dot-com/dist/_models/DeviceStates';
+import { GarageState, LightState, LockState, SensorState } from 'node-alarm-dot-com';
 import {
   GARAGE_STATES,
   LIGHT_STATES,
   LOCK_STATES,
   SENSOR_STATES,
   SYSTEM_STATES
-} from 'node-alarm-dot-com/dist/_models/states';
-import { AuthOpts } from 'node-alarm-dot-com/dist/_models/AuthOpts';
-import { FlattenedSystemState } from 'node-alarm-dot-com/dist/_models/systemState';
+} from 'node-alarm-dot-com';
+import { AuthOpts } from 'node-alarm-dot-com';
+import { FlattenedSystemState } from 'node-alarm-dot-com';
 import path from 'path';
 
 let hap: HAP;
@@ -319,7 +319,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
               if (!accessory) {
                 return this.addLight(light);
               }
-              this.statLightState(accessory, light);
+              this.statLightState(accessory, light, null);
             });
           } else {
             this.log.info('No lights found, ignore if expected, or check configuration with security system provider');
@@ -706,7 +706,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
       this.setupLight(accessory);
 
       // Set the initial light state
-      this.statLightState(accessory, light);
+      this.statLightState(accessory, light, null);
     }
   }
 
@@ -729,11 +729,9 @@ class ADCPlatform implements DynamicPlatformPlugin {
       .setCharacteristic(Characteristic.SerialNumber, id);
 
     // Setup event listeners
-    // TODO: Why are these callbacks listed as only accepting () => void?
     // @ts-ignore
     accessory.on(PlatformAccessoryEvent.IDENTIFY, (paired, callback) => {
       this.log.info(`${name} identify requested, paired=${paired}`);
-
       callback();
     });
 
@@ -744,15 +742,19 @@ class ADCPlatform implements DynamicPlatformPlugin {
       .on('get', (callback: CharacteristicGetCallback) => {
         callback(null, accessory.context.state);
       })
-      .on('set', (value: CharacteristicValue,
-                  callback: CharacteristicSetCallback) => this.changeLightState(accessory, value, accessory.context.state, callback));
+      .on('set', (on: CharacteristicValue, callback: CharacteristicSetCallback) => {
+        this.changeLight(accessory, on, callback);
+      });
 
     if (accessory.context.isDimmer) {
       service
         .getCharacteristic(Characteristic.Brightness)
-        .on('get', (callback: CharacteristicGetCallback) => callback(null, accessory.context.lightLevel))
-        .on('set', (value: CharacteristicValue,
-                    callback: CharacteristicSetCallback) => this.changeLightState(accessory, value, accessory.context.lightLevel, callback));
+        .on('get', (callback: CharacteristicGetCallback) => {
+          callback(null, accessory.context.lightLevel);
+        })
+        .on('set', (brightness: CharacteristicValue, callback: CharacteristicSetCallback) => {
+          this.changeLightBrightness(accessory, brightness, callback);
+        });
     }
   }
 
@@ -761,28 +763,31 @@ class ADCPlatform implements DynamicPlatformPlugin {
    *
    * @param accessory  The accessory representing the light accessory.
    * @param light  The light accessory parameters from Alarm.com.
+   * @param callback
    */
-  statLightState(accessory: PlatformAccessory, light: LightState): void {
+  statLightState(accessory: PlatformAccessory, light: LightState, callback?: CharacteristicSetCallback) {
     const id = accessory.context.accID;
     const name = accessory.context.name;
-    const state = getLightState(light.attributes.state);
-    const brightness = light.attributes.lightLevel;
+    const newState = getLightState(light.attributes.state);
+    const newBrightness = light.attributes.lightLevel;
 
-    if (state !== accessory.context.state) {
-      this.log.info(`Updating light ${name} (${id}), state=${state}, prev=${accessory.context.state}`);
+    if (newState !== accessory.context.state) {
+      this.log.info(`Updating light ${name} (${id}), state=${newState}, prev=${accessory.context.state}`);
 
-      accessory.context.state = state;
+      accessory.context.state = newState;
 
       accessory.getService(Service.Lightbulb)!
-        .getCharacteristic(Characteristic.On)
-        .updateValue(state);
+        .updateCharacteristic(Characteristic.On, newState);
     }
 
-    if (accessory.context.isDimmer && brightness !== accessory.context.brightness) {
-      accessory.context.brightness = brightness;
+    if (accessory.context.isDimmer && newBrightness !== accessory.context.brightness) {
+      accessory.context.brightness = newBrightness;
       accessory.getService(Service.Lightbulb)!
-        .getCharacteristic(Characteristic.Brightness)
-        .updateValue(brightness);
+        .updateCharacteristic(Characteristic.Brightness, newBrightness);
+    }
+
+    if (callback !== null) {
+      callback();
     }
   }
 
@@ -790,34 +795,66 @@ class ADCPlatform implements DynamicPlatformPlugin {
    * Change the physical state of a light using the Alarm.com API.
    *
    * @param accessory  The light to be changed.
-   * @param {boolean} value  Value representing off or on states of the light.
    * @param {number} brightness  The brightness of a light, from 0-100 (only
    *    works with dimmers).
    * @param callback
    */
-  changeLightState(accessory: PlatformAccessory, value: CharacteristicValue, brightness: number,
-                   callback: CharacteristicSetCallback): void {
+  changeLightBrightness(accessory: PlatformAccessory, brightness: CharacteristicValue,
+                        callback: CharacteristicSetCallback) {
+    const id = accessory.context.accID;
+
+    this.log.info(`Changing light (${accessory.context.accID}, light level ${brightness})`);
+
+    accessory.context.lightLevel = brightness;
+
+    this.login()
+      .then(res => setLightOn(id, res, brightness))
+      .then(res => res.data)
+      .then(light => {
+        this.statLightState(accessory, light, callback);
+      })
+      .catch(err => {
+        this.log.error(`Error: Failed to change light state: ${err.stack}`);
+        this.refreshDevices();
+        callback(err);
+      });
+  }
+
+  /**
+   * Change the physical state of a light using the Alarm.com API.
+   *
+   * @param accessory  The light to be changed.
+   * @param {boolean} on  Value representing off or on states of the light.
+   * @param callback
+   */
+  changeLight(accessory: PlatformAccessory, on: CharacteristicValue,
+              callback: CharacteristicSetCallback) {
+    // Alarm.com expects a single call for both brightness and 'on'
+    // We need to ignore the extra call when changing brightness from homekit.
+    if (on === accessory.context.state) {
+      callback();
+      return;
+    }
+
     const id = accessory.context.accID;
     let method: typeof setLightOn | typeof setLightOff;
 
-    if (value === true) {
+    if (on === true) {
       method = setLightOn;
     } else {
       method = setLightOff;
     }
 
-    this.log.info(`Changing light (${accessory.context.accID}, ${value} light level ${brightness})`);
+    this.log.info(`Changing light (${accessory.context.accID}, ${on})`);
 
-    accessory.context.state = value;
-    accessory.context.lightLevel = brightness;
+    accessory.context.state = on;
 
     this.login()
-      .then(res => method(id, res, brightness))
+      .then(res => method(id, res))
       .then(res => res.data)
       .then(light => {
-        this.statLightState(accessory, light);
+        this.statLightState(accessory, light, callback);
       })
-      .then(_ => callback()) //TODO: need to determine why we need this
       .catch(err => {
         this.log.error(`Error: Failed to change light state: ${err.stack}`);
         this.refreshDevices();
@@ -1314,9 +1351,9 @@ function getSensorState(sensor: SensorState): CharacteristicValue {
 function getLightState(state: number): CharacteristicValue {
   switch (state) {
     case LIGHT_STATES.OFF:
-      return 0;
+      return false;
     case LIGHT_STATES.ON:
-      return 1;
+      return true;
     default:
       return -1;
   }
