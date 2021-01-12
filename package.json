@@ -1,6 +1,7 @@
 {
   "name": "homebridge-node-alarm-dot-com",
-  "version": "1.6.4",
+  "version": "1.7.0-beta.0",
+  "betaVersion": "1.7.0",
   "description": "Alarm.com plugin for Homebridge using Node.js",
   "author": {
     "name": "Mike Kormendy",
@@ -20,11 +21,11 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/mkormendy/homebridge-node-alarm-dot-com.git"
+    "url": "git+https://github.com/node-alarm-dot-com/homebridge-node-alarm-dot-com.git"
   },
-  "homepage": "https://github.com/mkormendy/homebridge-node-alarm-dot-com#readme",
+  "homepage": "https://github.com/node-alarm-dot-com/homebridge-node-alarm-dot-com#readme",
   "bugs": {
-    "url": "https://github.com/mkormendy/homebridge-node-alarm-dot-com/issues"
+    "url": "https://github.com/node-alarm-dot-com/homebridge-node-alarm-dot-com/issues"
   },
   "main": "dist/index.js",
   "files": [
@@ -33,7 +34,7 @@
   ],
   "scripts": {
     "clean": "rimraf ./dist",
-    "lint": "eslint src/**.ts --max-warnings=0",
+    "lint": "eslint src/**.ts",
     "build": "rimraf ./dist && tsc",
     "prepublishOnly": "npm run lint && npm run build",
     "postpublish": "npm run clean",
@@ -51,6 +52,9 @@
   },
   "devDependencies": {
     "@types/node": "^14.0.27",
+    "@typescript-eslint/eslint-plugin": "^4.13.0",
+    "@typescript-eslint/parser": "^4.13.0",
+    "eslint": "^7.17.0",
     "homebridge": "^1.1.2",
     "nodemon": "^2.0.6",
     "rimraf": "^3.0.2",

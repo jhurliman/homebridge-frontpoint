@@ -55,9 +55,7 @@ export = (api: API) => {
   Characteristic = api.hap.Characteristic;
   UUIDGen = api.hap.uuid;
 
-  // TODO: Why does TS not think we need 'true'? What is 'True' for?
-  // @ts-ignore
-  api.registerPlatform(PLUGIN_ID, PLUGIN_NAME, ADCPlatform, true);
+  api.registerPlatform(PLUGIN_NAME, ADCPlatform);
 };
 
 class ADCPlatform implements DynamicPlatformPlugin {
@@ -149,7 +147,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
   registerAlarmSystem() {
     this.listDevices()
       .then(res => {
-        for (let device in res) {
+        for (const device in res) {
           if (device === 'partitions' && typeof res[device][0] == 'undefined') {
             // throw error if no partition, ideally this should never occur
             throw new Error(`Received no partitions from Alarm.com`);
@@ -157,8 +155,8 @@ class ADCPlatform implements DynamicPlatformPlugin {
             this.log.info(`Received ${res[device].length} ${device} from Alarm.com`);
 
             res[device].forEach(d => {
-              let deviceType = d.type;
-              let realDeviceType = deviceType.split('/')[1];
+              const deviceType = d.type;
+              const realDeviceType = deviceType.split('/')[1];
 
               if (!this.ignoredDevices.includes(d.id)) {
                 if (realDeviceType === 'partition') {
@@ -412,12 +410,8 @@ class ADCPlatform implements DynamicPlatformPlugin {
       .setCharacteristic(Characteristic.SerialNumber, id);
 
     // Setup event listeners
-    // TODO: Why are these callbacks listed as only accepting () => void?
-    // @ts-ignore
-    accessory.on('identify', (paired, callback) => {
-      this.log.debug(`${name} identify requested, paired=${paired}`);
-
-      callback();
+    accessory.on('identify', () => {
+      this.log.debug(`${name} identify requested`);
     });
 
     const service = accessory.getService(Service.SecuritySystem)!;
@@ -513,10 +507,11 @@ class ADCPlatform implements DynamicPlatformPlugin {
       case Characteristic.SecuritySystemTargetState.DISARM:
         method = disarm;
         break;
-      default:
+      default: {
         const msg = `Can't set SecuritySystem to unknown value ${value}`;
         this.log.warn(msg);
         return callback(new Error(msg));
+      }
     }
 
     this.log.info(`changePartitionState(${accessory.context.accID}, ${value})`);
@@ -605,12 +600,8 @@ class ADCPlatform implements DynamicPlatformPlugin {
       .setCharacteristic(Characteristic.SerialNumber, id);
 
     // Setup event listeners
-    // TODO: Why are these callbacks listed as only accepting () => void?
-    // @ts-ignore
-    accessory.on(PlatformAccessoryEvent.IDENTIFY, (paired, callback) => {
-      this.log.info(`${name} identify requested, paired=${paired}`);
-
-      callback();
+    accessory.on(PlatformAccessoryEvent.IDENTIFY, () => {
+      this.log.info(`${name} identify requested`);
     });
 
     const service = accessory.getService(type)!;
@@ -729,10 +720,8 @@ class ADCPlatform implements DynamicPlatformPlugin {
       .setCharacteristic(Characteristic.SerialNumber, id);
 
     // Setup event listeners
-    // @ts-ignore
-    accessory.on(PlatformAccessoryEvent.IDENTIFY, (paired, callback) => {
-      this.log.info(`${name} identify requested, paired=${paired}`);
-      callback();
+    accessory.on(PlatformAccessoryEvent.IDENTIFY, () => {
+      this.log.info(`${name} identify requested`);
     });
 
     const service = accessory.getService(type)!;
@@ -927,7 +916,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
     }
 
     // Setup HomeKit accessory information
-    let homeKitService = accessory.getService(Service.AccessoryInformation);
+    const homeKitService = accessory.getService(Service.AccessoryInformation);
 
     if (homeKitService == undefined) {
       throw new Error(`Trouble getting HomeKit accessory information for ${accessory.context.accID}`);
@@ -939,12 +928,8 @@ class ADCPlatform implements DynamicPlatformPlugin {
       .setCharacteristic(Characteristic.SerialNumber, id);
 
     // Setup event listeners
-    // @ts-ignore
-    // Todo: (paired, callback) causes troubles
-    accessory.on(PlatformAccessoryEvent.IDENTIFY, (paired, callback) => {
-      this.log.info(`${name} identify requested, paired=${paired}`);
-
-      callback();
+    accessory.on(PlatformAccessoryEvent.IDENTIFY, () => {
+      this.log.info(`${name} identify requested`);
     });
 
     const service = accessory.getService(type);
@@ -1020,10 +1005,11 @@ class ADCPlatform implements DynamicPlatformPlugin {
       case Characteristic.LockTargetState.SECURED:
         method = setLockSecure;
         break;
-      default:
+      default: {
         const msg = `Can't set LockMechanism to unknown value ${value}`;
         this.log.warn(msg);
         return callback(new Error(msg));
+      }
     }
 
     this.log.info(`(un)secureLock)(${accessory.context.accID}, ${value})`);
@@ -1102,13 +1088,9 @@ class ADCPlatform implements DynamicPlatformPlugin {
       .setCharacteristic(Characteristic.SerialNumber, id);
 
     // Setup event listeners
-
-    // @ts-ignore
     // Todo: (paired, callback) causes troubles
-    accessory.on('identify', (paired, callback) => {
-      this.log.info(`${name} identify requested, paired=${paired}`);
-
-      callback();
+    accessory.on('identify', () => {
+      this.log.info(`${name} identify requested`);
     });
 
     const service = accessory.getService(type);
@@ -1179,10 +1161,11 @@ class ADCPlatform implements DynamicPlatformPlugin {
       case Characteristic.TargetDoorState.CLOSED:
         method = closeGarage;
         break;
-      default:
+      default: {
         const msg = `Can't set garage to unknown value ${value}`;
         this.log.warn(msg);
         return callback(new Error(msg));
+      }
     }
 
     this.log.info(`Garage Door ${accessory.context.accID}, ${value})`);
@@ -1257,10 +1240,10 @@ class ADCPlatform implements DynamicPlatformPlugin {
    * @param payload {*}  The output to populate the log file with.
    */
   writePayload(payloadLogPath: string, payloadLogName: string, payload: string): void {
-    let now = new Date();
-    let formatted_datetime = now.toLocaleString();
-    let name = this.config.name;
-    let prefix = '[' + formatted_datetime + '] [' + name + '] ';
+    const now = new Date();
+    const formatted_datetime = now.toLocaleString();
+    const name = this.config.name;
+    const prefix = '[' + formatted_datetime + '] [' + name + '] ';
 
     fs.mkdir(path.dirname(payloadLogPath), {
       recursive: true
