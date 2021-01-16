@@ -32,6 +32,7 @@
     "LICENSE",
     "dist"
   ],
+  "types": "./dist/index.d.ts",
   "scripts": {
     "clean": "rimraf ./dist",
     "lint": "eslint src/**.ts",
@@ -47,7 +48,7 @@
     "homebridge": ">=0.4.21"
   },
   "dependencies": {
-    "node-alarm-dot-com": "latest",
+    "node-alarm-dot-com": "beta",
     "polling-to-event": "^2.1.0"
   },
   "devDependencies": {

@@ -21,16 +21,16 @@ import {
   setLightOff, setLightOn,
   setLockSecure, setLockUnsecure
 } from 'node-alarm-dot-com';
-import { GarageState, LightState, LockState, SensorState } from 'node-alarm-dot-com';
+import { AuthOpts } from 'node-alarm-dot-com/dist/_models/AuthOpts';
+import { GarageState, LightState, LockState, SensorState } from 'node-alarm-dot-com/dist/_models/DeviceStates';
 import {
   GARAGE_STATES,
   LIGHT_STATES,
   LOCK_STATES,
   SENSOR_STATES,
   SYSTEM_STATES
-} from 'node-alarm-dot-com';
-import { AuthOpts } from 'node-alarm-dot-com';
-import { FlattenedSystemState } from 'node-alarm-dot-com';
+} from 'node-alarm-dot-com/dist/_models/States';
+import { FlattenedSystemState } from 'node-alarm-dot-com/dist/_models/SystemState';
 import path from 'path';
 
 let hap: HAP;
@@ -797,7 +797,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
     accessory.context.lightLevel = brightness;
 
     this.login()
-      .then(res => setLightOn(id, res, brightness))
+      .then(res => setLightOn(id, res, accessory.context.lightLevel))
       .then(res => res.data)
       .then(light => {
         this.statLightState(accessory, light, callback);
@@ -839,7 +839,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
     accessory.context.state = on;
 
     this.login()
-      .then(res => method(id, res))
+      .then(res => method(id, res, accessory.context.lightLevel ?? 100))
       .then(res => res.data)
       .then(light => {
         this.statLightState(accessory, light, callback);
