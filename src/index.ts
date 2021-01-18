@@ -55,7 +55,7 @@ export = (api: API) => {
   Characteristic = api.hap.Characteristic;
   UUIDGen = api.hap.uuid;
 
-  api.registerPlatform(PLUGIN_NAME, ADCPlatform);
+  api.registerPlatform(PLUGIN_ID, PLUGIN_NAME, ADCPlatform);
 };
 
 class ADCPlatform implements DynamicPlatformPlugin {
