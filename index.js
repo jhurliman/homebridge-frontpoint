@@ -52,6 +52,7 @@ class ADCPlatform {
         silentArming: false
       },
       'night': {
+        nightArming: true,
         noEntryDelay: false,
         silentArming: true
       },
@@ -492,7 +493,7 @@ class ADCPlatform {
         opts.silentArming = this.armingModes.stay.silentArming;
         break
       case Characteristic.SecuritySystemTargetState.NIGHT_ARM:
-        method = nodeADC.armStay
+        method = nodeADC.armNightStay
         opts.noEntryDelay = this.armingModes.night.noEntryDelay;
         opts.silentArming = this.armingModes.night.silentArming;
         break
