@@ -16,19 +16,26 @@ import {
   armAway,
   armStay,
   closeGarage,
-  disarm, getCurrentState,
+  disarm,
+  getCurrentState,
   login,
   openGarage,
-  setLightOff, setLightOn,
-  setLockSecure, setLockUnsecure,
+  setLightOff,
+  setLightOn,
+  setLockSecure,
+  setLockUnsecure,
   AuthOpts,
   GARAGE_STATES,
   LIGHT_STATES,
   LOCK_STATES,
   SENSOR_STATES,
   SYSTEM_STATES,
-  GarageState, LightState, LockState, SensorState,
-  FlattenedSystemState
+  GarageState,
+  LightState,
+  LockState,
+  SensorState,
+  FlattenedSystemState,
+  armNightStay
 } from 'node-alarm-dot-com';
 
 let hap: HAP;
@@ -98,6 +105,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
         silentArming: false
       },
       'night': {
+        nightArming: true,
         noEntryDelay: false,
         silentArming: true
       },
@@ -493,7 +501,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
         opts.silentArming = this.armingModes.stay.silentArming;
         break;
       case Characteristic.SecuritySystemTargetState.NIGHT_ARM:
-        method = armStay;
+        method = armNightStay;
         opts.noEntryDelay = this.armingModes.night.noEntryDelay;
         opts.silentArming = this.armingModes.night.silentArming;
         break;
