@@ -1,6 +1,6 @@
 {
   "name": "homebridge-node-alarm-dot-com",
-  "version": "1.6.5",
+  "version": "1.7.0",
   "description": "Alarm.com plugin for Homebridge using Node.js",
   "author": {
     "name": "Mike Kormendy",
@@ -20,14 +20,26 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/mkormendy/homebridge-node-alarm-dot-com.git"
+    "url": "git+https://github.com/node-alarm-dot-com/homebridge-node-alarm-dot-com.git"
   },
-  "homepage": "https://github.com/mkormendy/homebridge-node-alarm-dot-com#readme",
+  "homepage": "https://github.com/node-alarm-dot-com/homebridge-node-alarm-dot-com#readme",
   "bugs": {
-    "url": "https://github.com/mkormendy/homebridge-node-alarm-dot-com/issues"
+    "url": "https://github.com/node-alarm-dot-com/homebridge-node-alarm-dot-com/issues"
   },
-  "main": "index.js",
+  "main": "dist/index.js",
+  "files": [
+    "LICENSE",
+    "dist"
+  ],
+  "types": "./dist/index.d.ts",
   "scripts": {
+    "clean": "rimraf ./dist",
+    "lint": "eslint src/**.ts",
+    "build": "rimraf ./dist && tsc",
+    "prepublishOnly": "npm run lint && npm run build",
+    "postpublish": "npm run clean",
+    "start": "ts-node src/index.ts",
+    "watch": "npm run build && npm link && nodemon",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "engines": {
@@ -35,8 +47,18 @@
     "homebridge": ">=0.4.21"
   },
   "dependencies": {
-    "@oznu/homebridge-types": "0.0.4",
     "node-alarm-dot-com": "latest",
     "polling-to-event": "^2.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^14.0.27",
+    "@typescript-eslint/eslint-plugin": "^4.13.0",
+    "@typescript-eslint/parser": "^4.13.0",
+    "eslint": "^7.17.0",
+    "homebridge": "^1.1.2",
+    "nodemon": "^2.0.6",
+    "rimraf": "^3.0.2",
+    "ts-node": "^8.10.2",
+    "typescript": "^3.9.7"
   }
 }
