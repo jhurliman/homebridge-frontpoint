@@ -11,6 +11,7 @@ import {
 } from 'homebridge';
 
 import fs from 'fs';
+import path from 'path';
 import {
   armAway,
   armStay,
@@ -19,19 +20,16 @@ import {
   login,
   openGarage,
   setLightOff, setLightOn,
-  setLockSecure, setLockUnsecure
-} from 'node-alarm-dot-com';
-import { AuthOpts } from 'node-alarm-dot-com/dist/_models/AuthOpts';
-import { GarageState, LightState, LockState, SensorState } from 'node-alarm-dot-com/dist/_models/DeviceStates';
-import {
+  setLockSecure, setLockUnsecure,
+  AuthOpts,
   GARAGE_STATES,
   LIGHT_STATES,
   LOCK_STATES,
   SENSOR_STATES,
-  SYSTEM_STATES
-} from 'node-alarm-dot-com/dist/_models/States';
-import { FlattenedSystemState } from 'node-alarm-dot-com/dist/_models/SystemState';
-import path from 'path';
+  SYSTEM_STATES,
+  GarageState, LightState, LockState, SensorState,
+  FlattenedSystemState
+} from 'node-alarm-dot-com';
 
 let hap: HAP;
 const PLUGIN_ID = 'homebridge-node-alarm-dot-com';
