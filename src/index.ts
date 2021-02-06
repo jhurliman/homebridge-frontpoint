@@ -11,6 +11,13 @@ import {
 } from 'homebridge';
 
 import fs from 'fs';
+import {
+  GARAGE_STATES,
+  LIGHT_STATES,
+  LOCK_STATES,
+  SENSOR_STATES,
+  SYSTEM_STATES
+} from 'node-alarm-dot-com/dist/_models/States';
 import path from 'path';
 import {
   armAway,
@@ -25,11 +32,6 @@ import {
   setLockSecure,
   setLockUnsecure,
   AuthOpts,
-  GARAGE_STATES,
-  LIGHT_STATES,
-  LOCK_STATES,
-  SENSOR_STATES,
-  SYSTEM_STATES,
   GarageState,
   LightState,
   LockState,
