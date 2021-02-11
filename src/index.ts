@@ -36,8 +36,7 @@ import {
   LightState,
   LockState,
   SensorState,
-  FlattenedSystemState,
-  armNightStay
+  FlattenedSystemState
 } from 'node-alarm-dot-com';
 
 let hap: HAP;
@@ -103,6 +102,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
     // Default arming mode options
     this.armingModes = {
       'away': {
+        nightArming: false,
         noEntryDelay: false,
         silentArming: false
       },
@@ -112,6 +112,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
         silentArming: true
       },
       'stay': {
+        nightArming: false,
         noEntryDelay: false,
         silentArming: true
       }
@@ -120,6 +121,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
     // Overwrite default arming modes with config settings.
     if (this.config.armingModes !== undefined) {
       for (const key in this.config.armingModes) {
+        this.armingModes[key].nightArming = Boolean(this.config.armingModes[key].nightArming);
         this.armingModes[key].noEntryDelay = Boolean(this.config.armingModes[key].noEntryDelay);
         this.armingModes[key].silentArming = Boolean(this.config.armingModes[key].silentArming);
       }
@@ -501,16 +503,19 @@ class ADCPlatform implements DynamicPlatformPlugin {
         method = armStay;
         opts.noEntryDelay = this.armingModes.stay.noEntryDelay;
         opts.silentArming = this.armingModes.stay.silentArming;
+        opts.silentArming = this.armingModes.stay.nightArming;
         break;
       case Characteristic.SecuritySystemTargetState.NIGHT_ARM:
-        method = armNightStay;
+        method = armStay;
         opts.noEntryDelay = this.armingModes.night.noEntryDelay;
         opts.silentArming = this.armingModes.night.silentArming;
+        opts.silentArming = this.armingModes.night.nightArming;
         break;
       case Characteristic.SecuritySystemTargetState.AWAY_ARM:
         method = armAway;
         opts.noEntryDelay = this.armingModes.away.noEntryDelay;
         opts.silentArming = this.armingModes.away.silentArming;
+        opts.silentArming = this.armingModes.away.nightArming;
         break;
       case Characteristic.SecuritySystemTargetState.DISARM:
         method = disarm;
