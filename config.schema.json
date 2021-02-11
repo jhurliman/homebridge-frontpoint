@@ -40,11 +40,11 @@
         "default": 3,
         "required": true,
         "oneOf": [
-          { "title": "0 - No log entries", "enum": [0] },
-          { "title": "1 - Only errors", "enum": [1] },
-          { "title": "2 - Only warnings and errors", "enum": [2] },
-          { "title": "3 - Notices, warnings, and errors (Default)", "enum": [3] },
-          { "title": "4 - Verbose", "enum": [4] }
+          {"title": "0 - No log entries", "enum": [0]},
+          {"title": "1 - Only errors", "enum": [1]},
+          {"title": "2 - Only warnings and errors", "enum": [2]},
+          {"title": "3 - Notices, warnings, and errors (Default)", "enum": [3]},
+          {"title": "4 - Verbose", "enum": [4]}
         ]
       },
       "authTimeoutMinutes": {
@@ -60,18 +60,18 @@
         "description": "(<u>WARNING:</u> choosing a time less than 60 seconds could possibly ban/disable your account from Alarm.com.)"
       },
       "armingModes": {
-        "title": "<b>Alarm.com arming modes (OPTIONAL)</b>. <p>(<u>WARNING:</u> the Alarm.com webAPI does not support setting silent arming to true and this feature does not work at this time.)",
+        "title": "<b>Alarm.com arming modes (OPTIONAL)</b>.<p>Not all panels are compatible with silent arming. Enabling this without proper support will break thatt arming type.",
         "type": "object",
         "properties": {
-            "away": {
-              "$ref": "#/definitions/arming_obj", "extendRefs": true
-            },
-            "night": {
-              "$ref": "#/definitions/arming_obj", "extendRefs": true
-            },
-            "stay": {
-              "$ref": "#/definitions/arming_obj", "extendRefs": true
-            }
+          "away": {
+            "$ref": "#/definitions/arming_obj", "extendRefs": true
+          },
+          "night": {
+            "$ref": "#/definitions/arming_obj", "extendRefs": true
+          },
+          "stay": {
+            "$ref": "#/definitions/arming_obj", "extendRefs": true
+          }
         }
       },
       "ignoredDevices": {
