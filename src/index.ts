@@ -76,6 +76,8 @@ class ADCPlatform implements DynamicPlatformPlugin {
   private armingModes: any;
   private ignoredDevices: string[];
   private timerID!: NodeJS.Timeout;
+  private useMFA: boolean;
+  private mfaToken?: string;
 
   /**
    * The platform class constructor used when registering a plugin.
@@ -90,6 +92,8 @@ class ADCPlatform implements DynamicPlatformPlugin {
     this.config = config || { platform: PLUGIN_NAME };
     this.logLevel = this.config.logLevel || LOG_LEVEL;
     this.ignoredDevices = this.config.ignoredDevices || [];
+    this.useMFA = this.config.useMFA || false;
+    this.mfaToken = this.config.useMFA ? this.config.mfaCookie : null;
 
     this.config.authTimeoutMinutes = this.config.authTimeoutMinutes || AUTH_TIMEOUT_MINS;
     this.config.pollTimeoutSeconds = this.config.pollTimeoutSeconds || POLL_TIMEOUT_SECS;
@@ -244,7 +248,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
     this.log.info(`Logging into Alarm.com as ${this.config.username}`);
 
-    return login(this.config.username, this.config.password)
+    return login(this.config.username, this.config.password, this.mfaToken)
       .then((authOpts: AuthOpts) => {
         // Cache login response and estimated expiration time
         authOpts.expires = +new Date() + 1000 * 60 * this.config.authTimeoutMinutes;
