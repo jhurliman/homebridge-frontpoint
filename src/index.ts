@@ -68,7 +68,10 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
   private readonly log: Logger;
   private readonly api: API;
-  // this is used to track restored cached accessories
+  /**
+   * Used to keep track of restored, cached accessories
+   * @private
+   */
   private readonly accessories: PlatformAccessory[];
   authOpts: AuthOpts;
   private config: PlatformConfig;
@@ -226,6 +229,12 @@ class ADCPlatform implements DynamicPlatformPlugin {
       this.setupPartition(accessory);
     } else if (accessory.context.sensorType) {
       this.setupSensor(accessory);
+    } else if (accessory.context.lightType) {
+      this.setupLight(accessory);
+    } else if (accessory.context.lockType) {
+      this.setupLock(accessory);
+    } else if (accessory.context.garageType) {
+      this.setupGarage(accessory);
     } else {
       this.log.warn(`Unrecognized accessory ${accessory.context.accID}`);
     }
