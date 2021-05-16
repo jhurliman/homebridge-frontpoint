@@ -72,7 +72,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
    * Used to keep track of restored, cached accessories
    * @private
    */
-  private readonly accessories: PlatformAccessory[];
+  private readonly accessories: PlatformAccessory[] = [];
   authOpts: AuthOpts;
   private config: PlatformConfig;
   private logLevel: number;
@@ -101,7 +101,6 @@ class ADCPlatform implements DynamicPlatformPlugin {
     this.config.authTimeoutMinutes = this.config.authTimeoutMinutes || AUTH_TIMEOUT_MINS;
     this.config.pollTimeoutSeconds = this.config.pollTimeoutSeconds || POLL_TIMEOUT_SECS;
 
-    this.accessories = [];
     this.authOpts = {
       expires: +new Date() - 1
     } as AuthOpts;
@@ -162,6 +161,17 @@ class ADCPlatform implements DynamicPlatformPlugin {
    * registerAlarmSystem method
    */
   registerAlarmSystem() {
+    // First, let's unregister any restored devices the user wants ignored
+    this.accessories.forEach(accessory => {
+      // If the device is ignored, we want to stop the restore
+      const ignored = this.ignoredDevices.indexOf(accessory.context.accID) > -1;
+      if (ignored) {
+        this.log.debug(`Removing ignored device ${accessory.context.accID} from homebridge`);
+        // Remove the accessory from HomeBridge
+        this.removeAccessory(accessory);
+      }
+    });
+
     this.listDevices()
       .then(res => {
         for (const device in res) {
@@ -174,22 +184,29 @@ class ADCPlatform implements DynamicPlatformPlugin {
             res[device].forEach(d => {
               const deviceType = d.type;
               const realDeviceType = deviceType.split('/')[1];
-
+              // Check so we don't add accessories which were already restored
+              // Don't add devices which should be ignored
               if (!this.ignoredDevices.includes(d.id)) {
-                if (realDeviceType === 'partition') {
-                  this.addPartition(d);
-                } else if (realDeviceType === 'sensor') {
-                  this.addSensor(d);
-                } else if (realDeviceType === 'light') {
-                  this.addLight(d);
-                } else if (realDeviceType === 'lock') {
-                  this.addLock(d);
-                } else if (realDeviceType === 'garage-door') {
-                  this.addGarage(d);
-                }
-                // add more devices here as available, ie. garage doors, etc
+                const uuid = this.api.hap.uuid.generate(d.id);
+                const existingAccessory = this.accessories.find(accessory => accessory.UUID === uuid);
+                if (!existingAccessory) {
+                  if (realDeviceType === 'partition') {
+                    this.addPartition(d);
+                  } else if (realDeviceType === 'sensor') {
+                    this.addSensor(d);
+                  } else if (realDeviceType === 'light') {
+                    this.addLight(d);
+                  } else if (realDeviceType === 'lock') {
+                    this.addLock(d);
+                  } else if (realDeviceType === 'garage-door') {
+                    this.addGarage(d);
+                  }
+                  // add more devices here as available, ie. garage doors, etc
 
-                this.log.info(`Added ${realDeviceType} ${d.attributes.description} (${d.id})`);
+                  this.log.info(`Added ${realDeviceType} ${d.attributes.description} (${d.id})`);
+                } else {
+                  this.log.info(`Restoring accessory with ID ${d.id}`);
+                }
               } else {
                 this.log.info(`Ignored sensor ${d.attributes.description} (${d.id})`);
               }
@@ -217,14 +234,6 @@ class ADCPlatform implements DynamicPlatformPlugin {
    * @param {object} accessory  The accessory in question.
    */
   configureAccessory(accessory: PlatformAccessory) {
-
-    this.log.info(`Loaded from cache: ${accessory.context.name} (${accessory.context.accID})`);
-
-    const existing = this.accessories[accessory.context.accID];
-    if (existing) {
-      this.removeAccessory(existing);
-    }
-
     if (accessory.context.partitionType) {
       this.setupPartition(accessory);
     } else if (accessory.context.sensorType) {
@@ -236,10 +245,11 @@ class ADCPlatform implements DynamicPlatformPlugin {
     } else if (accessory.context.garageType) {
       this.setupGarage(accessory);
     } else {
-      this.log.warn(`Unrecognized accessory ${accessory.context.accID}`);
+      this.log.warn(`Unrecognized accessory ${accessory.context.accID} loaded from cache`);
     }
 
-    this.accessories[accessory.context.accID] = accessory;
+    this.accessories.push(accessory);
+    this.log.info(`Loaded from cache: ${accessory.context.name} (${accessory.context.accID})`);
   }
 
 
@@ -311,11 +321,16 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
           if (system.partitions) {
             system.partitions.forEach((partition) => {
-              const accessory = this.accessories[partition.id];
-              if (!accessory) {
-                return this.addPartition(partition);
+              const accessory = this.accessories.find(accessory => accessory.context.accID == partition.id);
+              // Don't do anything if the device is ignored
+              if (!this.ignoredDevices.includes(partition.id)) {
+                // If this is a new device, add it to the system
+                if (!accessory) {
+                  return this.addPartition(partition);
+                }
+                // Get the current device state
+                this.statPartitionState(accessory, partition);
               }
-              this.statPartitionState(accessory, partition);
             });
           } else {
             // fatal error, we require partitions and cannot continue
@@ -324,11 +339,13 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
           if (system.sensors) {
             system.sensors.forEach((sensor) => {
-              const accessory = this.accessories[sensor.id];
-              if (!accessory) {
-                return this.addSensor(sensor);
+              const accessory = this.accessories.find(accessory => accessory.context.accID == sensor.id);
+              if (!this.ignoredDevices.includes(sensor.id)) {
+                if (!accessory) {
+                  return this.addSensor(sensor);
+                }
+                this.statSensorState(accessory, sensor);
               }
-              this.statSensorState(accessory, sensor);
             });
           } else {
             this.log.info('No sensors found, ignore if expected, or check configuration with security system provider');
@@ -336,11 +353,13 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
           if (system.lights) {
             system.lights.forEach((light) => {
-              const accessory = this.accessories[light.id];
-              if (!accessory) {
-                return this.addLight(light);
+              const accessory = this.accessories.find(accessory => accessory.context.accID == light.id);
+              if (!this.ignoredDevices.includes(light.id)) {
+                if (!accessory) {
+                  return this.addLight(light);
+                }
+                this.statLightState(accessory, light, null);
               }
-              this.statLightState(accessory, light, null);
             });
           } else {
             this.log.info('No lights found, ignore if expected, or check configuration with security system provider');
@@ -348,11 +367,13 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
           if (system.locks) {
             system.locks.forEach((lock) => {
-              const accessory = this.accessories[lock.id];
-              if (!accessory) {
-                return this.addLock(lock);
+              const accessory = this.accessories.find(accessory => accessory.context.accID == lock.id);
+              if (!this.ignoredDevices.includes(lock.id)) {
+                if (!accessory) {
+                  return this.addLock(lock);
+                }
+                this.statLockState(accessory, lock);
               }
-              this.statLockState(accessory, lock);
             });
           } else {
             this.log.info('No locks found, ignore if expected, or check configuration with security system provider');
@@ -360,11 +381,13 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
           if (system.garages) {
             system.garages.forEach((garage) => {
-              const accessory = this.accessories[garage.id];
-              if (!accessory) {
-                return this.addGarage(garage);
+              const accessory = this.accessories.find(accessory => accessory.context.accID == garage.id);
+              if (!this.ignoredDevices.includes(garage.id)) {
+                if (!accessory) {
+                  return this.addGarage(garage);
+                }
+                this.statGarageState(accessory, garage);
               }
-              this.statGarageState(accessory, garage);
             });
           } else {
             this.log.info('No garage doors found, ignore if expected, or check configuration with security system provider');
@@ -386,7 +409,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
    */
   addPartition(partition) {
     const id = partition.id;
-    let accessory = this.accessories[id];
+    let accessory = this.accessories.find(accessory => accessory.context.accID === id);
     if (accessory) {
       this.removeAccessory(accessory);
     }
@@ -566,7 +589,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
    */
   addSensor(sensor: SensorState): void {
     const id = sensor.id;
-    let accessory = this.accessories[id];
+    let accessory = this.accessories.find(accessory => accessory.context.accID === id);
     // in an ideal world, homebridge shouldn't be restarted too often
     // so upon starting we clean dist the cache of alarm accessories
     if (accessory) {
@@ -689,7 +712,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
    */
   addLight(light: LightState): void {
     const id = light.id;
-    let accessory = this.accessories[id];
+    let accessory = this.accessories.find(accessory => accessory.context.accID === id);
     // in an ideal world, homebridge shouldn't be restarted too often
     // so upon starting we clean dist the cache of alarm accessories
     if (accessory) {
@@ -888,7 +911,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
    */
   addLock(lock: LockState): void {
     const id = lock.id;
-    let accessory = this.accessories[id];
+    let accessory = this.accessories.find(accessory => accessory.context.accID === id);
     // in an ideal world, homebridge shouldn't be restarted too often
     // so upon starting we clean dist the cache of alarm accessories
     if (accessory) {
@@ -1060,7 +1083,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
   addGarage(garage: GarageState): void {
     const id = garage.id;
-    let accessory = this.accessories[id];
+    let accessory = this.accessories.find(accessory => accessory.context.accID === id);
     // in an ideal world, homebridge shouldn't be restarted too often
     // so upon starting we clean dist the cache of alarm accessories
     if (accessory) this.removeAccessory(accessory);
@@ -1224,13 +1247,17 @@ class ADCPlatform implements DynamicPlatformPlugin {
   addAccessory(accessory: PlatformAccessory, type: typeof Service, model: string): void {
     const id = accessory.context.accID;
     const name = accessory.context.name;
-    this.accessories[id] = accessory;
+    this.accessories.push(accessory);
 
     // Setup HomeKit service
     accessory.addService(type, name);
 
     // Register new accessory in HomeKit
-    this.api.registerPlatformAccessories(PLUGIN_ID, PLUGIN_NAME, [accessory]);
+    if (this.accessories.findIndex(accessory => accessory.context.accID === id) > -1) {
+      this.api.registerPlatformAccessories(PLUGIN_ID, PLUGIN_NAME, [accessory]);
+    } else {
+      this.log.warn(`Preventing adding existing accessory ${name} with id ${id}`);
+    }
   }
 
 
@@ -1246,7 +1273,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
     this.log.info(`Removing ${accessory.context.name} (${accessory.context.accID}) from HomeBridge`);
     this.api.unregisterPlatformAccessories(PLUGIN_ID, PLUGIN_NAME, [accessory]);
-    delete this.accessories[this.accessories.indexOf(accessory)];
+    this.accessories.splice(this.accessories.indexOf(accessory), 1);
   }
 
   /**
