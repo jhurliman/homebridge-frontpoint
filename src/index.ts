@@ -78,7 +78,6 @@ class ADCPlatform implements DynamicPlatformPlugin {
   private logLevel: number;
   private armingModes: any;
   private ignoredDevices: string[];
-  private timerID!: NodeJS.Timeout;
   private useMFA: boolean;
   private mfaToken?: string;
 
@@ -224,7 +223,19 @@ class ADCPlatform implements DynamicPlatformPlugin {
       });
 
     // Start a timer to periodically refresh status
-    this.timerID = setInterval(() => this.refreshDevices(), this.config.pollTimeoutSeconds * 1000);
+    this.timerLoop();
+  }
+
+  /**
+   * Create a randomized timer to refresh device state
+   */
+  timerLoop() {
+    // Create a randomized delay by adding between 0 - 5 minutes to timer
+    const timerDelay = (this.config.pollTimeoutSeconds * 1000) + (300000 * Math.random());
+    setTimeout(() => {
+      this.refreshDevices();
+      this.timerLoop();
+    }, timerDelay);
   }
 
   /**
