@@ -36,8 +36,9 @@ import {
   LightState,
   LockState,
   SensorState,
-  FlattenedSystemState
+  FlattenedSystemState, DeviceState
 } from 'node-alarm-dot-com';
+import { SimplifiedSystemState } from './_models/SimplifiedSystemState';
 
 let hap: HAP;
 const PLUGIN_ID = 'homebridge-node-alarm-dot-com';
@@ -173,6 +174,9 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
     this.listDevices()
       .then(res => {
+        this.log.debug('Registering system:');
+        this.log.debug(res as any);
+
         for (const device in res) {
           if (device === 'partitions' && typeof res[device][0] == 'undefined') {
             // throw error if no partition, ideally this should never occur
@@ -180,7 +184,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
           } else if (res[device].length > 0) {
             this.log.info(`Received ${res[device].length} ${device} from Alarm.com`);
 
-            res[device].forEach(d => {
+            res[device].forEach((d: DeviceState) => {
               const deviceType = d.type;
               const realDeviceType = deviceType.split('/')[1];
               // Check so we don't add accessories which were already restored
@@ -192,13 +196,13 @@ class ADCPlatform implements DynamicPlatformPlugin {
                   if (realDeviceType === 'partition') {
                     this.addPartition(d);
                   } else if (realDeviceType === 'sensor') {
-                    this.addSensor(d);
+                    this.addSensor(d as SensorState);
                   } else if (realDeviceType === 'light') {
-                    this.addLight(d);
+                    this.addLight(d as LightState);
                   } else if (realDeviceType === 'lock') {
-                    this.addLock(d);
+                    this.addLock(d as LockState);
                   } else if (realDeviceType === 'garage-door') {
-                    this.addGarage(d);
+                    this.addGarage(d as GarageState);
                   }
                   // add more devices here as available, ie. garage doors, etc
 
@@ -293,7 +297,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
   /**
    * Method to gather devices and transform into a usable object.
    */
-  listDevices(): Promise<any> {
+  listDevices(): Promise<SimplifiedSystemState> {
     return this.login()
       .then(res => fetchStateForAllSystems(res))
       .then(systemStates => {
