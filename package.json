@@ -53,15 +53,14 @@
     "polling-to-event": "^2.1.0"
   },
   "devDependencies": {
-    "@types/node": "^15.3.0",
-    "@typescript-eslint/eslint-plugin": "^4.23.0",
-    "@typescript-eslint/parser": "^4.23.0",
-    "eslint": "^7.26.0",
+    "@types/node": "^15.12.4",
+    "@typescript-eslint/eslint-plugin": "^4.28.0",
+    "@typescript-eslint/parser": "^4.28.0",
+    "eslint": "^7.29.0",
     "homebridge": "^1.3.4",
-    "homebridge-config-ui-x": "^4.41.1",
     "nodemon": "^2.0.7",
     "rimraf": "^3.0.2",
     "ts-node": "^9.1.1",
-    "typescript": "^4.2.4"
+    "typescript": "^4.3.4"
   }
 }
