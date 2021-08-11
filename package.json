@@ -51,15 +51,16 @@
     "homebridge": ">=0.4.21"
   },
   "dependencies": {
-    "node-alarm-dot-com": "^1.11.0-beta.7",
+    "node-alarm-dot-com": "^1.11.0-beta.8",
     "polling-to-event": "^2.1.0"
   },
   "devDependencies": {
     "@types/node": "^16.4.14",
-    "@typescript-eslint/eslint-plugin": "^4.29.1",
-    "@typescript-eslint/parser": "^4.29.1",
+    "@typescript-eslint/eslint-plugin": "^4.28.3",
+    "@typescript-eslint/parser": "^4.28.3",
     "eslint": "^7.32.0",
     "homebridge": "^1.3.4",
+    "homebridge-config-ui-x": "^4.41.2",
     "nodemon": "^2.0.12",
     "rimraf": "^3.0.2",
     "ts-node": "^10.2.0",
