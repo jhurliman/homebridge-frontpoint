@@ -2,14 +2,14 @@ name: Node-CI Beta
 
 on:
   push:
-    branches: beta
+    branches: [beta]
 
 jobs:
   build:
 
     strategy:
       matrix:
-        node-version: [10.x, 12.x, 14.x]
+        node-version: [12.x, 14.x, 16.x]
         os: [ubuntu-latest]
 
     runs-on: ${{ matrix.os }}
