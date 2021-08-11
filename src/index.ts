@@ -74,7 +74,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
    * Used to keep track of restored, cached accessories
    * @private
    */
-  public readonly accessories: PlatformAccessory[] = [];
+  private readonly accessories: PlatformAccessory[] = [];
   private authOpts: AuthOpts;
   private config: PlatformConfig;
   private logLevel: number;
@@ -274,28 +274,34 @@ class ADCPlatform implements DynamicPlatformPlugin {
   /**
    * Method to retrieve/store/maintain login session state for the account.
    */
-  async login(): Promise<AuthOpts> {
-    // Cache expiration check
+  async loginSession(): Promise<AuthOpts> {
     const now = +new Date();
-    if (this.authOpts.expires > now) {
-      return Promise.resolve(this.authOpts);
-    } else {
+    if (now > this.authOpts.expires) {
       this.log.info(`Logging into Alarm.com as ${this.config.username}`);
+      //const authOpts = await login(this.config.username, this.config.password, this.mfaToken);
+      await login(this.config.username, this.config.password, this.mfaToken)
+        .then(authOpts => {
 
-      const authOpts = await login(this.config.username, this.config.password, this.mfaToken);
-      // Cache login response and estimated expiration time
-      authOpts.expires = +new Date() + 1000 * 60 * this.config.authTimeoutMinutes;
-      this.authOpts = authOpts;
-      this.log.info(`Logged into Alarm.com as ${this.config.username}`);
-      return Promise.resolve(this.authOpts);
+
+          // Cache login response and estimated expiration time
+          authOpts.expires = +new Date() + 1000 * 60 * this.config.authTimeoutMinutes;
+          this.authOpts = authOpts;
+          this.log.info(`Logged into Alarm.com as ${this.config.username}`);
+        })
+        .catch(err => {
+          this.log.error(`loginSession Error: ${err.message}`);
+          this.log.info('Refreshing session authentication.');
+          this.authOpts.expires = +new Date() - 1000 * 60 * this.config.authTimeoutMinutes; // set to the past to trigger refresh
+        });
     }
+    return this.authOpts;
   }
 
   /**
    * Method to gather devices and transform into a usable object.
    */
   async listDevices(): Promise<SimplifiedSystemState> {
-    const res = await this.login();
+    const res = await this.loginSession();
     const systemStates = await fetchStateForAllSystems(res);
     return systemStates.reduce((out, system) => {
       out.partitions = out.partitions.concat(system.partitions);
@@ -317,7 +323,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
    * Method to update state on accessories/devices.
    */
   async refreshDevices(): Promise<void> {
-    await this.login()
+    await this.loginSession()
       .then(res => fetchStateForAllSystems(res))
       .then(systemStates => {
 
@@ -405,7 +411,11 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
         });
       })
-      .catch(err => this.log.error(err));
+      .catch(err => {
+        this.log.error(`refreshDevices Error: ${err.message}`);
+        this.log.info('Refreshing session authentication.');
+        this.authOpts.expires = +new Date() - 1000 * 60 * this.config.authTimeoutMinutes; // set to the past to trigger refresh
+      });
   }
 
 
@@ -417,7 +427,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
    *
    * @param {Object} partition  Passed in partition object from Alarm.com
    */
-  addPartition(partition) {
+  addPartition(partition): void {
     const id = partition.id;
     let accessory = this.accessories.find(accessory => accessory.context.accID === id);
     if (accessory) {
@@ -453,7 +463,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
    *
    * @param accessory  The accessory representing the alarm panel.
    */
-  setupPartition(accessory: PlatformAccessory) {
+  setupPartition(accessory: PlatformAccessory): void {
     const id = accessory.context.accID;
     const name = accessory.context.name;
     const model = 'Security Panel';
@@ -493,7 +503,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
    * @param accessory  The accessory representing the alarm panel.
    * @param partition  The alarm panel parameters from Alarm.com.
    */
-  statPartitionState(accessory: PlatformAccessory, partition) {
+  statPartitionState(accessory: PlatformAccessory, partition): void {
     const id = accessory.context.accID;
     const name = accessory.context.name;
     const state = getPartitionState(partition.attributes.state);
@@ -577,7 +587,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
     accessory.context.desiredState = value;
 
-    await this.login()
+    await this.loginSession()
       .then(res => method(id, res, opts))
       .then(res => res.data)
       .then(partition => this.statPartitionState(accessory, partition))
@@ -608,7 +618,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
     const [type, characteristic, model] = getSensorType(sensor);
     if (type === undefined) {
-      this.log.warn(`Warning: Sensor ${sensor.attributes.description} has unknown state ${sensor.attributes.state}, ${characteristic} (ID: ${sensor.id})`);
+      this.log.warn(`Warning: Sensor ${sensor.attributes.description} has unknown state ${sensor.attributes.state} (${sensor.id})`);
       return;
     }
 
@@ -812,7 +822,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
    * @param light  The light accessory parameters from Alarm.com.
    * @param callback
    */
-  statLightState(accessory: PlatformAccessory, light: LightState, callback?: CharacteristicSetCallback) {
+  statLightState(accessory: PlatformAccessory, light: LightState, callback?: CharacteristicSetCallback): void {
     const id = accessory.context.accID;
     const name = accessory.context.name;
     const newState = getLightState(light.attributes.state);
@@ -854,7 +864,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
     accessory.context.lightLevel = brightness;
 
-    await this.login()
+    await this.loginSession()
       .then(res => setLightOn(id, res, accessory.context.lightLevel))
       .then(res => res.data)
       .then(light => {
@@ -896,7 +906,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
     accessory.context.state = on;
 
-    await this.login()
+    await this.loginSession()
       .then(res => method(id, res, accessory.context.lightLevel ?? 100))
       .then(res => res.data)
       .then(light => {
@@ -1075,7 +1085,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
     accessory.context.desiredState = value;
 
-    await this.login()
+    await this.loginSession()
       .then(res => method(id, res))
       .then(res => res.data)
       .then(lock => {
@@ -1235,7 +1245,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
     accessory.context.desiredState = value;
 
-    await this.login()
+    await this.loginSession()
       .then(res => method(id, res)) // Usually 20-30 seconds
       .then(res => res.data)
       .then(garage => {
@@ -1336,12 +1346,12 @@ class ADCPlatform implements DynamicPlatformPlugin {
 /**
  * Fetches all relationships for a system from Alarm.com
  *
- * @param res  Response object from login().
+ * @param res  Response object from loginSession().
  * @returns {Promise<[(number | bigint), number, number, number, number, number,
  *   number, number, number, number]>}  See SystemState.ts for return type.
  */
-function fetchStateForAllSystems(res: AuthOpts): Promise<FlattenedSystemState[]> {
-  return Promise.all(res.systems.map((id: string) => getCurrentState(id.toString(), res)));
+async function fetchStateForAllSystems(res: AuthOpts): Promise<FlattenedSystemState[]> {
+  return Promise.all(res.systems.map((id: string) => getCurrentState(id, res)));
 }
 
 /**
@@ -1415,7 +1425,7 @@ function getLightState(state: number): CharacteristicValue {
  * @param state  The state as defined by Alarm.com.
  * @returns {number|*}  The state as defines it.
  */
-function getLockState(state: number) {
+function getLockState(state: number): CharacteristicValue {
   switch (state) {
     case LOCK_STATES.UNSECURED:
       return Characteristic.LockCurrentState.UNSECURED;
@@ -1432,7 +1442,7 @@ function getLockState(state: number) {
  * @param state  The state as defined by Alarm.com.
  * @returns {number|*}  The state as defines it.
  */
-function getGarageState(state: number) {
+function getGarageState(state: number): CharacteristicValue {
   switch (state) {
     case GARAGE_STATES.OPEN:
       return Characteristic.CurrentDoorState.OPEN;
