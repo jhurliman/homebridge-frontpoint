@@ -4,7 +4,7 @@ import {
   CharacteristicSetCallback,
   CharacteristicValue,
   DynamicPlatformPlugin,
-  HAP, Logging, PlatformAccessory,
+  HAP, Logger, PlatformAccessory,
   PlatformAccessoryEvent,
   PlatformConfig
 } from 'homebridge';
@@ -51,6 +51,7 @@ import {
   PartitionContext,
   SensorContext
 } from './_models/Contexts';
+import { CustomLogger, CustomLogLevel } from './CustomLogger';
 
 let hap: HAP;
 const PLUGIN_ID = 'homebridge-node-alarm-dot-com';
@@ -58,7 +59,7 @@ const PLUGIN_NAME = 'Alarmdotcom';
 const MANUFACTURER = 'Alarm.com';
 const AUTH_TIMEOUT_MINS = 10; // default for session authentication refresh
 const POLL_TIMEOUT_SECS = 60; // default for device state polling
-const LOG_LEVEL = 3; // default for log entries: 0 = NONE, 1 = ERROR, 2 = WARN, 3 = NOTICE, 4 = VERBOSE
+const LOG_LEVEL = CustomLogLevel.NOTICE; // default for log entries: 0 = NONE, 1 = ERROR, 2 = WARN, 3 = NOTICE, 4 = VERBOSE
 
 let Accessory: typeof PlatformAccessory;
 let Service: HAP['Service'];
@@ -77,7 +78,7 @@ export = (api: API): void => {
 
 class ADCPlatform implements DynamicPlatformPlugin {
 
-  public readonly log: Logging;
+  public readonly log: CustomLogger;
   public readonly api: API;
   /**
    * Used to keep track of restored, cached accessories
@@ -86,7 +87,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
   private readonly accessories: PlatformAccessory[] = [];
   private authOpts: AuthOpts;
   private config: PlatformConfig;
-  private logLevel: number;
+  private logLevel: CustomLogLevel;
   private armingModes: any;
   private ignoredDevices: string[];
   private useMFA: boolean;
@@ -99,17 +100,17 @@ class ADCPlatform implements DynamicPlatformPlugin {
    * @param config  The platform's config.json section as object.
    * @param api  The homebridge API.
    */
-  constructor(log: Logging, config: PlatformConfig, api: API) {
-    this.log = log;
+  constructor(log: Logger, config: PlatformConfig, api: API) {
     this.api = api;
-    this.config = config || { platform: PLUGIN_NAME };
-    this.logLevel = this.config.logLevel || LOG_LEVEL;
-    this.ignoredDevices = this.config.ignoredDevices || [];
-    this.useMFA = this.config.useMFA || false;
+    this.config = config ?? {platform: PLUGIN_NAME};
+    this.logLevel = this.config.logLevel ?? LOG_LEVEL;
+    this.log = new CustomLogger(log, this.logLevel);
+    this.ignoredDevices = this.config.ignoredDevices ?? [];
+    this.useMFA = this.config.useMFA ?? false;
     this.mfaToken = this.config.useMFA ? this.config.mfaCookie : null;
 
-    this.config.authTimeoutMinutes = this.config.authTimeoutMinutes || AUTH_TIMEOUT_MINS;
-    this.config.pollTimeoutSeconds = this.config.pollTimeoutSeconds || POLL_TIMEOUT_SECS;
+    this.config.authTimeoutMinutes = this.config.authTimeoutMinutes ?? AUTH_TIMEOUT_MINS;
+    this.config.pollTimeoutSeconds = this.config.pollTimeoutSeconds ?? POLL_TIMEOUT_SECS;
 
     this.authOpts = {
       expires: +new Date() - 1
