@@ -5,4 +5,7 @@ module.exports = {
   extends: [
     'plugin:@typescript-eslint/recommended',
   ],
+  rules: {
+    '@typescript-eslint/naming-convention': 'warn',
+  },
 };

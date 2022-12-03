@@ -1,10 +1,13 @@
 import {
-  API, APIEvent,
+  API,
+  APIEvent,
   CharacteristicGetCallback,
   CharacteristicSetCallback,
   CharacteristicValue,
   DynamicPlatformPlugin,
-  HAP, Logger, PlatformAccessory,
+  HAP,
+  Logger,
+  PlatformAccessory,
   PlatformAccessoryEvent,
   PlatformConfig
 } from 'homebridge';
@@ -24,22 +27,23 @@ import path from 'path';
 import {
   armAway,
   armStay,
+  AuthOpts,
   closeGarage,
+  DeviceState,
   disarm,
+  FlattenedSystemState,
+  GarageState,
   getCurrentState,
+  LightState,
+  LockState,
   login,
   openGarage,
+  SensorState,
+  SensorType,
   setLightOff,
   setLightOn,
   setLockSecure,
-  setLockUnsecure,
-  AuthOpts,
-  GarageState,
-  LightState,
-  LockState,
-  SensorState,
-  SensorType,
-  FlattenedSystemState, DeviceState
+  setLockUnsecure
 } from 'node-alarm-dot-com';
 
 import { SimplifiedSystemState } from './_models/SimplifiedSystemState';
@@ -61,17 +65,17 @@ const AUTH_TIMEOUT_MINS = 10; // default for session authentication refresh
 const POLL_TIMEOUT_SECS = 60; // default for device state polling
 const LOG_LEVEL = CustomLogLevel.NOTICE; // default for log entries: 0 = NONE, 1 = ERROR, 2 = WARN, 3 = NOTICE, 4 = VERBOSE
 
-let Accessory: typeof PlatformAccessory;
-let Service: HAP['Service'];
-let Characteristic: HAP['Characteristic'];
-let UUIDGen: typeof import('hap-nodejs/dist/lib/util/uuid');
+let platformAccessory: typeof PlatformAccessory;
+let hapService: HAP['Service'];
+let hapCharacteristic: HAP['Characteristic'];
+let uuidGen: typeof import('hap-nodejs/dist/lib/util/uuid');
 
 export = (api: API): void => {
   hap = api.hap;
-  Accessory = api.platformAccessory;
-  Service = api.hap.Service;
-  Characteristic = api.hap.Characteristic;
-  UUIDGen = api.hap.uuid;
+  platformAccessory = api.platformAccessory;
+  hapService = api.hap.Service;
+  hapCharacteristic = api.hap.Characteristic;
+  uuidGen = api.hap.uuid;
 
   api.registerPlatform(PLUGIN_ID, PLUGIN_NAME, ADCPlatform);
 };
@@ -85,6 +89,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
    * @private
    */
   private readonly accessories: PlatformAccessory[] = [];
+  private readonly accessoriesToUpdate: PlatformAccessory[] = [];
   private authOpts: AuthOpts;
   private config: PlatformConfig;
   private logLevel: CustomLogLevel;
@@ -183,6 +188,11 @@ class ADCPlatform implements DynamicPlatformPlugin {
       }
     });
 
+    // We also want to unregister any accessories which need upgrading so they will be readded on the next pull
+    this.accessoriesToUpdate.forEach(accessory => {
+      this.removeAccessory(accessory);
+    });
+
     this.listDevices()
       .then(res => {
         this.log.debug('Registering system:');
@@ -234,7 +244,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
       })
       .catch(err => {
-        this.log.error(`UNHANDLED ERROR: ${err.stack}`);
+        this.log.error(`Error: ${err.stack}`);
       });
 
     // Start a timer to periodically refresh status
@@ -260,6 +270,15 @@ class ADCPlatform implements DynamicPlatformPlugin {
    * @param {object} accessory  The accessory in question.
    */
   configureAccessory(accessory: PlatformAccessory) {
+    // Don't restore sensor if it's pre-1.8.1 as it needs upgrading.
+    if (accessory.context.sensorType) {
+      if (!accessory.context.type) {
+        this.log.debug(`Refusing to restore ${accessory.displayName} from cache`);
+        this.accessoriesToUpdate.push(accessory);
+        return;
+      }
+    }
+
     if (accessory.context.partitionType) {
       this.setupPartition(accessory as PlatformAccessory<PartitionContext>);
     } else if (accessory.context.sensorType) {
@@ -278,7 +297,6 @@ class ADCPlatform implements DynamicPlatformPlugin {
     this.log.info(`Loaded from cache: ${accessory.context.name} (${accessory.context.accID})`);
   }
 
-
   // Internal Methods //////////////////////////////////////////////////////////
 
   /**
@@ -291,8 +309,6 @@ class ADCPlatform implements DynamicPlatformPlugin {
       //const authOpts = await login(this.config.username, this.config.password, this.mfaToken);
       await login(this.config.username, this.config.password, this.mfaToken)
         .then(authOpts => {
-
-
           // Cache login response and estimated expiration time
           authOpts.expires = +new Date() + 1000 * 60 * this.config.authTimeoutMinutes;
           this.authOpts = authOpts;
@@ -445,8 +461,8 @@ class ADCPlatform implements DynamicPlatformPlugin {
     }
 
     const name = partition.attributes.description;
-    const uuid = UUIDGen.generate(id);
-    accessory = new Accessory(name, uuid);
+    const uuid = uuidGen.generate(id);
+    accessory = new platformAccessory(name, uuid);
 
     accessory.context = {
       accID: id,
@@ -459,7 +475,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
     this.log.info(`Adding partition ${name} (id=${id}, uuid=${uuid})`);
 
-    this.addAccessory(accessory, Service.SecuritySystem, 'Security Panel');
+    this.addAccessory(accessory, hapService.SecuritySystem, 'Security Panel');
 
     this.setupPartition(accessory);
 
@@ -480,30 +496,30 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
     // Setup HomeKit accessory information
     accessory
-      .getService(Service.AccessoryInformation)!
-      .setCharacteristic(Characteristic.Manufacturer, MANUFACTURER)
-      .setCharacteristic(Characteristic.Model, model)
-      .setCharacteristic(Characteristic.SerialNumber, id);
+      .getService(hapService.AccessoryInformation)!
+      .setCharacteristic(hapCharacteristic.Manufacturer, MANUFACTURER)
+      .setCharacteristic(hapCharacteristic.Model, model)
+      .setCharacteristic(hapCharacteristic.SerialNumber, id);
 
     // Setup event listeners
     accessory.on('identify', () => {
       this.log.debug(`${name} identify requested`);
     });
 
-    const service = accessory.getService(Service.SecuritySystem)!;
+    const service = accessory.getService(hapService.SecuritySystem)!;
 
     service
-      .getCharacteristic(Characteristic.SecuritySystemCurrentState)
+      .getCharacteristic(hapCharacteristic.SecuritySystemCurrentState)
       .on('get', (callback: CharacteristicGetCallback) => callback(null, accessory.context.state));
 
     service
-      .getCharacteristic(Characteristic.SecuritySystemTargetState)
+      .getCharacteristic(hapCharacteristic.SecuritySystemTargetState)
       .on('get', (callback: CharacteristicGetCallback) => callback(null, accessory.context.desiredState))
       .on('set', (value: CharacteristicValue,
                   callback: CharacteristicSetCallback) => this.changePartitionState(accessory, value, callback));
 
     service
-      .getCharacteristic(Characteristic.StatusFault)
+      .getCharacteristic(hapCharacteristic.StatusFault)
       .on('get', (callback: CharacteristicGetCallback) => callback(null, accessory.context.statusFault));
   }
 
@@ -525,8 +541,8 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
       accessory.context.state = state;
       accessory
-        .getService(Service.SecuritySystem)!
-        .getCharacteristic(Characteristic.SecuritySystemCurrentState)
+        .getService(hapService.SecuritySystem)!
+        .getCharacteristic(hapCharacteristic.SecuritySystemCurrentState)
         .updateValue(state);
     }
 
@@ -535,8 +551,8 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
       accessory.context.desiredState = desiredState;
       accessory
-        .getService(Service.SecuritySystem)!
-        .getCharacteristic(Characteristic.SecuritySystemTargetState)
+        .getService(hapService.SecuritySystem)!
+        .getCharacteristic(hapCharacteristic.SecuritySystemTargetState)
         .updateValue(desiredState);
     }
 
@@ -545,8 +561,8 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
       accessory.context.statusFault = statusFault;
       accessory
-        .getService(Service.SecuritySystem)!
-        .getCharacteristic(Characteristic.StatusFault)
+        .getService(hapService.SecuritySystem)!
+        .getCharacteristic(hapCharacteristic.StatusFault)
         .updateValue(statusFault);
     }
   }
@@ -565,25 +581,25 @@ class ADCPlatform implements DynamicPlatformPlugin {
     const opts = {} as any;
 
     switch (value) {
-      case Characteristic.SecuritySystemTargetState.STAY_ARM:
+      case hapCharacteristic.SecuritySystemTargetState.STAY_ARM:
         method = armStay;
         opts.noEntryDelay = this.armingModes.stay.noEntryDelay;
         opts.silentArming = this.armingModes.stay.silentArming;
         opts.silentArming = this.armingModes.stay.nightArming;
         break;
-      case Characteristic.SecuritySystemTargetState.NIGHT_ARM:
+      case hapCharacteristic.SecuritySystemTargetState.NIGHT_ARM:
         method = armStay;
         opts.noEntryDelay = this.armingModes.night.noEntryDelay;
         opts.silentArming = this.armingModes.night.silentArming;
         opts.silentArming = this.armingModes.night.nightArming;
         break;
-      case Characteristic.SecuritySystemTargetState.AWAY_ARM:
+      case hapCharacteristic.SecuritySystemTargetState.AWAY_ARM:
         method = armAway;
         opts.noEntryDelay = this.armingModes.away.noEntryDelay;
         opts.silentArming = this.armingModes.away.silentArming;
         opts.silentArming = this.armingModes.away.nightArming;
         break;
-      case Characteristic.SecuritySystemTargetState.DISARM:
+      case hapCharacteristic.SecuritySystemTargetState.DISARM:
         method = disarm;
         break;
       default: {
@@ -619,7 +635,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
    */
   addSensor(sensor: SensorState): void {
     const id = sensor.id;
-    let accessory = this.accessories.find(accessory => accessory.context.accID === id) as PlatformAccessory<SensorContext>;
+    let accessory = this.accessories.find(a => a.context.accID === id) as PlatformAccessory<SensorContext>;
     // in an ideal world, homebridge shouldn't be restarted too often
     // so upon starting we clean dist the cache of alarm accessories
     if (accessory) {
@@ -633,15 +649,16 @@ class ADCPlatform implements DynamicPlatformPlugin {
     }
 
     const name = sensor.attributes.description;
-    const uuid = UUIDGen.generate(id);
-    accessory = new Accessory(name, uuid);
+    const uuid = uuidGen.generate(id);
+    accessory = new platformAccessory(name, uuid);
 
     accessory.context = {
       accID: id,
       name: name,
       state: null,
       batteryLow: false,
-      sensorType: model
+      sensorType: model,
+      type: sensor.attributes.deviceType
     };
 
     // if the sensor id is not in the ignore list in the homebridge config
@@ -672,10 +689,10 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
     // Setup HomeKit accessory information
     accessory
-      .getService(Service.AccessoryInformation)!
-      .setCharacteristic(Characteristic.Manufacturer, MANUFACTURER)
-      .setCharacteristic(Characteristic.Model, model)
-      .setCharacteristic(Characteristic.SerialNumber, id);
+      .getService(hapService.AccessoryInformation)!
+      .setCharacteristic(hapCharacteristic.Manufacturer, MANUFACTURER)
+      .setCharacteristic(hapCharacteristic.Model, model)
+      .setCharacteristic(hapCharacteristic.SerialNumber, id);
 
     // Setup event listeners
     accessory.on(PlatformAccessoryEvent.IDENTIFY, () => {
@@ -689,7 +706,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
       .on('get', (callback: CharacteristicGetCallback) => callback(null, accessory.context.state));
 
     service
-      .getCharacteristic(Characteristic.StatusLowBattery)
+      .getCharacteristic(hapCharacteristic.StatusLowBattery)
       .on('get', (callback: CharacteristicGetCallback) => callback(null, accessory.context.batteryLow));
   }
 
@@ -723,7 +740,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
       accessory.context.batteryLow = batteryLow;
       accessory
         .getService(type)!
-        .getCharacteristic(Characteristic.StatusLowBattery)
+        .getCharacteristic(hapCharacteristic.StatusLowBattery)
         .updateValue(batteryLow);
     }
   }
@@ -749,13 +766,13 @@ class ADCPlatform implements DynamicPlatformPlugin {
     }
 
     const [type, model] = [
-      Service.Lightbulb,
+      hapService.Lightbulb,
       'Light'
     ];
 
     const name = light.attributes.description;
-    const uuid = UUIDGen.generate(id);
-    accessory = new Accessory(name, uuid);
+    const uuid = uuidGen.generate(id);
+    accessory = new platformAccessory(name, uuid);
 
     accessory.context = {
       accID: id,
@@ -788,14 +805,14 @@ class ADCPlatform implements DynamicPlatformPlugin {
     const id = accessory.context.accID;
     const name = accessory.context.name;
     const model = accessory.context.lightType;
-    const type = Service.Lightbulb;
+    const type = hapService.Lightbulb;
 
     // Setup HomeKit accessory information
     accessory
-      .getService(Service.AccessoryInformation)!
-      .setCharacteristic(Characteristic.Manufacturer, MANUFACTURER)
-      .setCharacteristic(Characteristic.Model, model)
-      .setCharacteristic(Characteristic.SerialNumber, id);
+      .getService(hapService.AccessoryInformation)!
+      .setCharacteristic(hapCharacteristic.Manufacturer, MANUFACTURER)
+      .setCharacteristic(hapCharacteristic.Model, model)
+      .setCharacteristic(hapCharacteristic.SerialNumber, id);
 
     // Setup event listeners
     accessory.on(PlatformAccessoryEvent.IDENTIFY, () => {
@@ -805,7 +822,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
     const service = accessory.getService(type)!;
 
     service
-      .getCharacteristic(Characteristic.On)
+      .getCharacteristic(hapCharacteristic.On)
       .on('get', (callback: CharacteristicGetCallback) => {
         callback(null, accessory.context.state);
       })
@@ -815,7 +832,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
     if (accessory.context.isDimmer) {
       service
-        .getCharacteristic(Characteristic.Brightness)
+        .getCharacteristic(hapCharacteristic.Brightness)
         .on('get', (callback: CharacteristicGetCallback) => {
           callback(null, accessory.context.lightLevel);
         })
@@ -843,14 +860,14 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
       accessory.context.state = newState;
 
-      accessory.getService(Service.Lightbulb)!
-        .updateCharacteristic(Characteristic.On, newState);
+      accessory.getService(hapService.Lightbulb)!
+        .updateCharacteristic(hapCharacteristic.On, newState);
     }
 
     if (accessory.context.isDimmer && newBrightness !== accessory.context.lightLevel) {
       accessory.context.lightLevel = newBrightness;
-      accessory.getService(Service.Lightbulb)!
-        .updateCharacteristic(Characteristic.Brightness, newBrightness);
+      accessory.getService(hapService.Lightbulb)!
+        .updateCharacteristic(hapCharacteristic.Brightness, newBrightness);
     }
 
     if (callback !== null) {
@@ -948,13 +965,13 @@ class ADCPlatform implements DynamicPlatformPlugin {
     }
 
     const [type, model] = [
-      Service.LockMechanism,
+      hapService.LockMechanism,
       'Door Lock'
     ];
 
     const name = lock.attributes.description;
-    const uuid = UUIDGen.generate(id);
-    accessory = new Accessory(name, uuid);
+    const uuid = uuidGen.generate(id);
+    accessory = new platformAccessory(name, uuid);
 
     accessory.context = {
       accID: id,
@@ -986,24 +1003,24 @@ class ADCPlatform implements DynamicPlatformPlugin {
     const name = accessory.context.name;
     const model = accessory.context.lockType;
     const [type, characteristic] = [
-      Service.LockMechanism,
-      Characteristic.LockCurrentState
+      hapService.LockMechanism,
+      hapCharacteristic.LockCurrentState
     ];
     if (!characteristic && this.logLevel > 1) {
       throw new Error(`Unrecognized lock ${accessory.context.accID}`);
     }
 
     // Setup HomeKit accessory information
-    const homeKitService = accessory.getService(Service.AccessoryInformation);
+    const homeKitService = accessory.getService(hapService.AccessoryInformation);
 
     if (homeKitService === undefined) {
       throw new Error(`Trouble getting HomeKit accessory information for ${accessory.context.accID}`);
     }
 
     homeKitService
-      .setCharacteristic(Characteristic.Manufacturer, MANUFACTURER)
-      .setCharacteristic(Characteristic.Model, model)
-      .setCharacteristic(Characteristic.SerialNumber, id);
+      .setCharacteristic(hapCharacteristic.Manufacturer, MANUFACTURER)
+      .setCharacteristic(hapCharacteristic.Model, model)
+      .setCharacteristic(hapCharacteristic.SerialNumber, id);
 
     // Setup event listeners
     accessory.on(PlatformAccessoryEvent.IDENTIFY, () => {
@@ -1017,13 +1034,13 @@ class ADCPlatform implements DynamicPlatformPlugin {
     }
 
     service
-      .getCharacteristic(Characteristic.LockCurrentState)
+      .getCharacteristic(hapCharacteristic.LockCurrentState)
       .on('get', (callback: CharacteristicGetCallback) => {
         callback(null, accessory.context.state);
       });
 
     service
-      .getCharacteristic(Characteristic.LockTargetState)
+      .getCharacteristic(hapCharacteristic.LockTargetState)
       .on('get', (callback: CharacteristicGetCallback) => callback(null, accessory.context.desiredState))
       .on('set', (value: CharacteristicValue,
                   callback: CharacteristicSetCallback) => this.changeLockState(accessory, value, callback));
@@ -1040,7 +1057,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
     const name = accessory.context.name;
     const state = getLockState(lock.attributes.state);
     const desiredState = getLockState(lock.attributes.desiredState);
-    const service = accessory.getService(Service.LockMechanism);
+    const service = accessory.getService(hapService.LockMechanism);
 
     if (service === undefined) {
       throw new Error(`Trouble getting HomeKit accessory information for ${accessory.context.accID}`);
@@ -1052,14 +1069,14 @@ class ADCPlatform implements DynamicPlatformPlugin {
       accessory.context.state = state;
 
       service
-        .getCharacteristic(Characteristic.LockCurrentState)
+        .getCharacteristic(hapCharacteristic.LockCurrentState)
         .updateValue(state);
     }
 
     if (desiredState !== accessory.context.desiredState) {
       accessory.context.desiredState = desiredState;
       service
-        .getCharacteristic(Characteristic.LockTargetState)
+        .getCharacteristic(hapCharacteristic.LockTargetState)
         .updateValue(desiredState);
     }
   }
@@ -1078,10 +1095,10 @@ class ADCPlatform implements DynamicPlatformPlugin {
     let method: typeof setLockSecure | typeof setLockUnsecure;
 
     switch (value) {
-      case Characteristic.LockTargetState.UNSECURED:
+      case hapCharacteristic.LockTargetState.UNSECURED:
         method = setLockUnsecure;
         break;
-      case Characteristic.LockTargetState.SECURED:
+      case hapCharacteristic.LockTargetState.SECURED:
         method = setLockSecure;
         break;
       default: {
@@ -1121,13 +1138,13 @@ class ADCPlatform implements DynamicPlatformPlugin {
     }
 
     const [type, model] = [
-      Service.GarageDoorOpener,
+      hapService.GarageDoorOpener,
       'Garage Door'
     ];
 
     const name = garage.attributes.description;
-    const uuid = UUIDGen.generate(id);
-    accessory = new Accessory(name, uuid);
+    const uuid = uuidGen.generate(id);
+    accessory = new platformAccessory(name, uuid);
 
     accessory.context = {
       accID: id,
@@ -1154,9 +1171,9 @@ class ADCPlatform implements DynamicPlatformPlugin {
     const name = accessory.context.name;
     const model = accessory.context.garageType;
     const [type, characteristic] = [
-      Service.GarageDoorOpener,
-      Characteristic.CurrentDoorState,
-      Characteristic.TargetDoorState
+      hapService.GarageDoorOpener,
+      hapCharacteristic.CurrentDoorState,
+      hapCharacteristic.TargetDoorState
       // Characteristic.ObstructionDetected
     ];
 
@@ -1165,10 +1182,10 @@ class ADCPlatform implements DynamicPlatformPlugin {
     }
 
     // Setup HomeKit accessory information
-    accessory.getService(Service.AccessoryInformation)!
-      .setCharacteristic(Characteristic.Manufacturer, MANUFACTURER)
-      .setCharacteristic(Characteristic.Model, model)
-      .setCharacteristic(Characteristic.SerialNumber, id);
+    accessory.getService(hapService.AccessoryInformation)!
+      .setCharacteristic(hapCharacteristic.Manufacturer, MANUFACTURER)
+      .setCharacteristic(hapCharacteristic.Model, model)
+      .setCharacteristic(hapCharacteristic.SerialNumber, id);
 
     // Setup event listeners
     // Todo: (paired, callback) causes troubles
@@ -1183,13 +1200,13 @@ class ADCPlatform implements DynamicPlatformPlugin {
     }
 
     service
-      .getCharacteristic(Characteristic.CurrentDoorState)
+      .getCharacteristic(hapCharacteristic.CurrentDoorState)
       .on('get', (callback: CharacteristicGetCallback) => {
         callback(null, accessory.context.state);
       });
 
     service
-      .getCharacteristic(Characteristic.TargetDoorState)
+      .getCharacteristic(hapCharacteristic.TargetDoorState)
       .on('get', (callback: CharacteristicGetCallback) => callback(null, accessory.context.desiredState))
       .on('set', (value: CharacteristicValue,
                   callback: CharacteristicSetCallback) => this.changeGarageState(accessory, value, callback));
@@ -1207,16 +1224,16 @@ class ADCPlatform implements DynamicPlatformPlugin {
       accessory.context.state = state;
 
       accessory
-        .getService(Service.GarageDoorOpener)!
-        .getCharacteristic(Characteristic.CurrentDoorState)
+        .getService(hapService.GarageDoorOpener)!
+        .getCharacteristic(hapCharacteristic.CurrentDoorState)
         .updateValue(state);
     }
 
     if (desiredState !== accessory.context.desiredState) {
       accessory.context.desiredState = desiredState;
       accessory
-        .getService(Service.GarageDoorOpener)!
-        .getCharacteristic(Characteristic.TargetDoorState)
+        .getService(hapService.GarageDoorOpener)!
+        .getCharacteristic(hapCharacteristic.TargetDoorState)
         .updateValue(desiredState);
     }
   }
@@ -1238,10 +1255,10 @@ class ADCPlatform implements DynamicPlatformPlugin {
     this.log.debug(String(value));
 
     switch (value) {
-      case Characteristic.TargetDoorState.OPEN:
+      case hapCharacteristic.TargetDoorState.OPEN:
         method = openGarage;
         break;
-      case Characteristic.TargetDoorState.CLOSED:
+      case hapCharacteristic.TargetDoorState.CLOSED:
         method = closeGarage;
         break;
       default: {
@@ -1278,7 +1295,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
    * @param type  The type of accessory.
    * @param model  The model of the accessory.
    */
-  addAccessory(accessory: PlatformAccessory<BaseContext>, type: typeof Service, model: string): void {
+  addAccessory(accessory: PlatformAccessory<BaseContext>, type: typeof hapService, model: string): void {
     const id = accessory.context.accID;
     const name = accessory.context.name;
     this.accessories.push(accessory);
@@ -1328,9 +1345,9 @@ class ADCPlatform implements DynamicPlatformPlugin {
    */
   writePayload(payloadLogPath: string, payloadLogName: string, payload: string): void {
     const now = new Date();
-    const formatted_datetime = now.toLocaleString();
+    const formattedDateTime = now.toLocaleString();
     const name = this.config.name;
-    const prefix = '[' + formatted_datetime + '] [' + name + '] ';
+    const prefix = '[' + formattedDateTime + '] [' + name + '] ';
 
     fs.mkdir(path.dirname(payloadLogPath), {
       recursive: true
@@ -1374,15 +1391,15 @@ function getPartitionState(state: number): number {
   // console.log(`${sensor.attributes.description} Sensor (${sensor.id}) is ${sensor.attributes.stateText}.`)
   switch (state) {
     case SYSTEM_STATES.ARMED_STAY:
-      return Characteristic.SecuritySystemCurrentState.STAY_ARM;
+      return hapCharacteristic.SecuritySystemCurrentState.STAY_ARM;
     case SYSTEM_STATES.ARMED_AWAY:
-      return Characteristic.SecuritySystemCurrentState.AWAY_ARM;
+      return hapCharacteristic.SecuritySystemCurrentState.AWAY_ARM;
     case SYSTEM_STATES.ARMED_NIGHT:
-      return Characteristic.SecuritySystemCurrentState.NIGHT_ARM;
+      return hapCharacteristic.SecuritySystemCurrentState.NIGHT_ARM;
     case SYSTEM_STATES.UNKNOWN:
     case SYSTEM_STATES.DISARMED:
     default:
-      return Characteristic.SecuritySystemCurrentState.DISARMED;
+      return hapCharacteristic.SecuritySystemCurrentState.DISARMED;
   }
 }
 
@@ -1396,17 +1413,19 @@ function getSensorState(sensor: SensorState): CharacteristicValue {
   // console.log(`${sensor.attributes.description} Sensor (${sensor.id}) is ${sensor.attributes.stateText}.`)
   switch (sensor.attributes.state) {
     case SENSOR_STATES.OPEN:
-      return Characteristic.ContactSensorState.CONTACT_NOT_DETECTED;
+      return hapCharacteristic.ContactSensorState.CONTACT_NOT_DETECTED;
     case SENSOR_STATES.CLOSED:
-      return Characteristic.ContactSensorState.CONTACT_DETECTED;
+      return hapCharacteristic.ContactSensorState.CONTACT_DETECTED;
     case SENSOR_STATES.ACTIVE:
-      return Characteristic.OccupancyDetected.OCCUPANCY_DETECTED;
+      return hapCharacteristic.OccupancyDetected.OCCUPANCY_DETECTED;
     case SENSOR_STATES.IDLE:
-      return Characteristic.OccupancyDetected.OCCUPANCY_NOT_DETECTED;
+      return hapCharacteristic.OccupancyDetected.OCCUPANCY_NOT_DETECTED;
     case SENSOR_STATES.WET:
-      return Characteristic.LeakDetected.LEAK_DETECTED;
+      return hapCharacteristic.LeakDetected.LEAK_DETECTED;
     case SENSOR_STATES.DRY:
-      return Characteristic.LeakDetected.LEAK_NOT_DETECTED;
+      return hapCharacteristic.LeakDetected.LEAK_NOT_DETECTED;
+    case SENSOR_STATES.UNKNOWN:
+      return hapCharacteristic.StatusFault.GENERAL_FAULT;
     default:
       return -1;
   }
@@ -1438,11 +1457,11 @@ function getLightState(state: number): CharacteristicValue {
 function getLockState(state: number): CharacteristicValue {
   switch (state) {
     case LOCK_STATES.UNSECURED:
-      return Characteristic.LockCurrentState.UNSECURED;
+      return hapCharacteristic.LockCurrentState.UNSECURED;
     case LOCK_STATES.SECURED:
-      return Characteristic.LockCurrentState.SECURED;
+      return hapCharacteristic.LockCurrentState.SECURED;
     default:
-      return Characteristic.LockCurrentState.UNKNOWN;
+      return hapCharacteristic.LockCurrentState.UNKNOWN;
   }
 }
 
@@ -1455,11 +1474,11 @@ function getLockState(state: number): CharacteristicValue {
 function getGarageState(state: number): CharacteristicValue {
   switch (state) {
     case GARAGE_STATES.OPEN:
-      return Characteristic.CurrentDoorState.OPEN;
+      return hapCharacteristic.CurrentDoorState.OPEN;
     case GARAGE_STATES.CLOSED:
-      return Characteristic.CurrentDoorState.CLOSED;
+      return hapCharacteristic.CurrentDoorState.CLOSED;
     default:
-      return Characteristic.CurrentDoorState.STOPPED;
+      return hapCharacteristic.CurrentDoorState.STOPPED;
   }
 }
 
@@ -1471,35 +1490,78 @@ function getGarageState(state: number): CharacteristicValue {
  */
 function getSensorType(sensor: SensorState): Array<any> {
   const state = sensor.attributes.state;
+  const type = sensor.attributes.deviceType;
 
-  switch (state) {
-    case SENSOR_STATES.CLOSED:
-    case SENSOR_STATES.OPEN:
+  switch (type) {
+    case SensorType.Motion_Sensor:
       return [
-        Service.ContactSensor,
-        Characteristic.ContactSensorState,
+        hapService.MotionSensor,
+        hapCharacteristic.MotionDetected,
+        'Motion Sensor'
+      ];
+    case SensorType.Smoke_Detector:
+    case SensorType.Heat_Detector:
+      return [
+        hapService.SmokeSensor,
+        hapCharacteristic.SmokeDetected,
+        'Heat Sensor'
+      ];
+    case SensorType.CO_Detector:
+      return [
+        hapService.CarbonMonoxideSensor,
+        hapCharacteristic.CarbonMonoxideDetected,
+        'Carbon Monoxide Detector'
+      ];
+    case SensorType.Fob:
+      return [
+        hapService.AccessControl,
+        hapCharacteristic.RemoteKey,
+        'Key fob'
+      ];
+    case SensorType.Water_Sensor:
+      return [
+        hapService.LeakSensor,
+        hapCharacteristic.LeakDetected,
+        'Water Sensor'
+      ];
+    case SensorType.Contact_Sensor:
+      return [
+        hapService.ContactSensor,
+        hapCharacteristic.ContactSensorState,
         'Contact Sensor'
       ];
-    case SENSOR_STATES.IDLE:
-    case SENSOR_STATES.ACTIVE:
-      return [
-        Service.OccupancySensor,
-        Characteristic.OccupancyDetected,
-        'Occupancy Sensor'
-      ];
-    case SENSOR_STATES.DRY:
-    case SENSOR_STATES.WET:
-      return [
-        Service.LeakSensor,
-        Characteristic.LeakDetected,
-        'Leak Sensor'
-      ];
+    // On default, fall back to the old way of detecting sensor types. This will ensure we don't lose some
+    //  devices we don't have types for
     default:
-      return [
-        undefined,
-        undefined,
-        undefined
-      ];
+      switch (state) {
+        case SENSOR_STATES.CLOSED:
+        case SENSOR_STATES.OPEN:
+          return [
+            hapService.ContactSensor,
+            hapCharacteristic.ContactSensorState,
+            'Contact Sensor'
+          ];
+        case SENSOR_STATES.IDLE:
+        case SENSOR_STATES.ACTIVE:
+          return [
+            hapService.OccupancySensor,
+            hapCharacteristic.OccupancyDetected,
+            'Occupancy Sensor'
+          ];
+        case SENSOR_STATES.DRY:
+        case SENSOR_STATES.WET:
+          return [
+            hapService.LeakSensor,
+            hapCharacteristic.LeakDetected,
+            'Leak Sensor'
+          ];
+        default:
+          return [
+            undefined,
+            undefined,
+            undefined
+          ];
+      }
   }
 }
 
@@ -1513,18 +1575,39 @@ function sensorModelToType(model: string): Array<any> {
   switch (model) {
     case 'Contact Sensor':
       return [
-        Service.ContactSensor,
-        Characteristic.ContactSensorState
+        hapService.ContactSensor,
+        hapCharacteristic.ContactSensorState
       ];
     case 'Occupancy Sensor':
       return [
-        Service.OccupancySensor,
-        Characteristic.OccupancyDetected
+        hapService.OccupancySensor,
+        hapCharacteristic.OccupancyDetected
       ];
     case 'Leak Sensor':
       return [
-        Service.LeakSensor,
-        Characteristic.LeakDetected
+        hapService.LeakSensor,
+        hapCharacteristic.LeakDetected
+      ];
+    case 'Key fob':
+      return [
+        hapService.AccessControl,
+        hapCharacteristic.RemoteKey
+      ];
+    case 'Carbon Monoxide Detector':
+      return [
+        hapService.CarbonMonoxideSensor,
+        hapCharacteristic.CarbonMonoxideDetected
+      ];
+    case 'Smoke Detector':
+    case 'Heat Sensor':
+      return [
+        hapService.SmokeSensor,
+        hapCharacteristic.SmokeDetected
+      ];
+    case 'Motion Sensor':
+      return [
+        hapService.MotionSensor,
+        hapCharacteristic.MotionDetected
       ];
     default:
       return [
