@@ -81,7 +81,6 @@ export = (api: API): void => {
 };
 
 class ADCPlatform implements DynamicPlatformPlugin {
-
   public readonly log: CustomLogger;
   public readonly api: API;
   /**
@@ -107,7 +106,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
    */
   constructor(log: Logger, config: PlatformConfig, api: API) {
     this.api = api;
-    this.config = config ?? {platform: PLUGIN_NAME};
+    this.config = config ?? { platform: PLUGIN_NAME };
     this.logLevel = this.config.logLevel ?? LOG_LEVEL;
     this.log = new CustomLogger(log, this.logLevel);
     this.ignoredDevices = this.config.ignoredDevices ?? [];
@@ -123,17 +122,17 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
     // Default arming mode options
     this.armingModes = {
-      'away': {
+      away: {
         nightArming: false,
         noEntryDelay: false,
         silentArming: false
       },
-      'night': {
+      night: {
         nightArming: true,
         noEntryDelay: false,
         silentArming: true
       },
-      'stay': {
+      stay: {
         nightArming: false,
         noEntryDelay: false,
         silentArming: true
@@ -178,7 +177,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
    */
   registerAlarmSystem() {
     // First, let's unregister any restored devices the user wants to be ignored
-    this.accessories.forEach(accessory => {
+    this.accessories.forEach((accessory) => {
       // If the device is ignored, we want to stop the restore
       const ignored = this.ignoredDevices.indexOf(accessory.context.accID) > -1;
       if (ignored) {
@@ -189,12 +188,12 @@ class ADCPlatform implements DynamicPlatformPlugin {
     });
 
     // We also want to unregister any accessories which need upgrading so they will be readded on the next pull
-    this.accessoriesToUpdate.forEach(accessory => {
+    this.accessoriesToUpdate.forEach((accessory) => {
       this.removeAccessory(accessory);
     });
 
     this.listDevices()
-      .then(res => {
+      .then((res) => {
         this.log.debug('Registering system:');
         this.log.debug(res as any);
 
@@ -212,7 +211,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
               // Don't add devices which should be ignored
               if (!this.ignoredDevices.includes(d.id)) {
                 const uuid = this.api.hap.uuid.generate(d.id);
-                const existingAccessory = this.accessories.find(accessory => accessory.UUID === uuid);
+                const existingAccessory = this.accessories.find((accessory) => accessory.UUID === uuid);
                 if (!existingAccessory) {
                   if (realDeviceType === 'partition') {
                     this.addPartition(d);
@@ -241,9 +240,8 @@ class ADCPlatform implements DynamicPlatformPlugin {
               provider has assigned ${device} in your Alarm.com account`);
           }
         }
-
       })
-      .catch(err => {
+      .catch((err) => {
         this.log.error(`Error: ${err.stack}`);
       });
 
@@ -256,7 +254,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
    */
   timerLoop() {
     // Create a randomized delay by adding between 0 - 30 seconds to timer
-    const timerDelay = (this.config.pollTimeoutSeconds * 1000) + (30000 * Math.random());
+    const timerDelay = this.config.pollTimeoutSeconds * 1000 + 30000 * Math.random();
     setTimeout(() => {
       this.refreshDevices();
       this.timerLoop();
@@ -308,13 +306,13 @@ class ADCPlatform implements DynamicPlatformPlugin {
       this.log.info(`Logging into Alarm.com as ${this.config.username}`);
       //const authOpts = await login(this.config.username, this.config.password, this.mfaToken);
       await login(this.config.username, this.config.password, this.mfaToken)
-        .then(authOpts => {
+        .then((authOpts) => {
           // Cache login response and estimated expiration time
           authOpts.expires = +new Date() + 1000 * 60 * this.config.authTimeoutMinutes;
           this.authOpts = authOpts;
           this.log.info(`Logged into Alarm.com as ${this.config.username}`);
         })
-        .catch(err => {
+        .catch((err) => {
           this.log.error(`loginSession Error: ${err.message}`);
           this.log.info('Refreshing session authentication.');
           this.authOpts.expires = +new Date() - 1000 * 60 * this.config.authTimeoutMinutes; // set to the past to trigger refresh
@@ -329,20 +327,23 @@ class ADCPlatform implements DynamicPlatformPlugin {
   async listDevices(): Promise<SimplifiedSystemState> {
     const res = await this.loginSession();
     const systemStates = await fetchStateForAllSystems(res);
-    return systemStates.reduce((out, system) => {
-      out.partitions = out.partitions.concat(system.partitions);
-      out.sensors = out.sensors.concat(system.sensors);
-      out.lights = out.lights.concat(system.lights);
-      out.locks = out.locks.concat(system.locks);
-      out.garages = out.garages.concat(system.garages);
-      return out;
-    }, {
-      partitions: [],
-      sensors: [],
-      lights: [],
-      locks: [],
-      garages: []
-    });
+    return systemStates.reduce(
+      (out, system) => {
+        out.partitions = out.partitions.concat(system.partitions);
+        out.sensors = out.sensors.concat(system.sensors);
+        out.lights = out.lights.concat(system.lights);
+        out.locks = out.locks.concat(system.locks);
+        out.garages = out.garages.concat(system.garages);
+        return out;
+      },
+      {
+        partitions: [],
+        sensors: [],
+        lights: [],
+        locks: [],
+        garages: []
+      }
+    );
   }
 
   /**
@@ -350,20 +351,20 @@ class ADCPlatform implements DynamicPlatformPlugin {
    */
   async refreshDevices(): Promise<void> {
     await this.loginSession()
-      .then(res => fetchStateForAllSystems(res))
-      .then(systemStates => {
-
+      .then((res) => fetchStateForAllSystems(res))
+      .then((systemStates) => {
         // writes systemStates payload to a file for debug/troubleshooting
         if (this.logLevel > 3) {
           this.writePayload(this.api.user.storagePath() + '/', 'ADC-SystemStates.json', JSON.stringify(systemStates));
         }
 
         // break dist system components
-        systemStates.forEach(system => {
-
+        systemStates.forEach((system) => {
           if (system.partitions) {
             system.partitions.forEach((partition) => {
-              const accessory = this.accessories.find(accessory => accessory.context.accID === partition.id) as PlatformAccessory<PartitionContext>;
+              const accessory = this.accessories.find(
+                (accessory) => accessory.context.accID === partition.id
+              ) as PlatformAccessory<PartitionContext>;
               // Don't do anything if the device is ignored
               if (!this.ignoredDevices.includes(partition.id)) {
                 // If this is a new device, add it to the system
@@ -381,7 +382,9 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
           if (system.sensors) {
             system.sensors.forEach((sensor) => {
-              const accessory = this.accessories.find(accessory => accessory.context.accID === sensor.id) as PlatformAccessory<SensorContext>;
+              const accessory = this.accessories.find(
+                (accessory) => accessory.context.accID === sensor.id
+              ) as PlatformAccessory<SensorContext>;
               if (!this.ignoredDevices.includes(sensor.id)) {
                 if (!accessory) {
                   return this.addSensor(sensor);
@@ -395,7 +398,9 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
           if (system.lights) {
             system.lights.forEach((light) => {
-              const accessory = this.accessories.find(accessory => accessory.context.accID === light.id) as PlatformAccessory<LightContext>;
+              const accessory = this.accessories.find(
+                (accessory) => accessory.context.accID === light.id
+              ) as PlatformAccessory<LightContext>;
               if (!this.ignoredDevices.includes(light.id)) {
                 if (!accessory) {
                   return this.addLight(light);
@@ -409,7 +414,9 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
           if (system.locks) {
             system.locks.forEach((lock) => {
-              const accessory = this.accessories.find(accessory => accessory.context.accID === lock.id) as PlatformAccessory<LockContext>;
+              const accessory = this.accessories.find(
+                (accessory) => accessory.context.accID === lock.id
+              ) as PlatformAccessory<LockContext>;
               if (!this.ignoredDevices.includes(lock.id)) {
                 if (!accessory) {
                   return this.addLock(lock);
@@ -423,7 +430,9 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
           if (system.garages) {
             system.garages.forEach((garage) => {
-              const accessory = this.accessories.find(accessory => accessory.context.accID === garage.id) as PlatformAccessory<GarageContext>;
+              const accessory = this.accessories.find(
+                (accessory) => accessory.context.accID === garage.id
+              ) as PlatformAccessory<GarageContext>;
               if (!this.ignoredDevices.includes(garage.id)) {
                 if (!accessory) {
                   return this.addGarage(garage);
@@ -432,18 +441,18 @@ class ADCPlatform implements DynamicPlatformPlugin {
               }
             });
           } else {
-            this.log.info('No garage doors found, ignore if expected, or check configuration with security system provider');
+            this.log.info(
+              'No garage doors found, ignore if expected, or check configuration with security system provider'
+            );
           }
-
         });
       })
-      .catch(err => {
+      .catch((err) => {
         this.log.error(`refreshDevices Error: ${err.message}`);
         this.log.info('Refreshing session authentication.');
         this.authOpts.expires = +new Date() - 1000 * 60 * this.config.authTimeoutMinutes; // set to the past to trigger refresh
       });
   }
-
 
   // Partition Methods /////////////////////////////////////////////////////////
 
@@ -455,7 +464,9 @@ class ADCPlatform implements DynamicPlatformPlugin {
    */
   addPartition(partition): void {
     const id = partition.id;
-    let accessory = this.accessories.find(accessory => accessory.context.accID === id) as PlatformAccessory<PartitionContext>;
+    let accessory = this.accessories.find(
+      (accessory) => accessory.context.accID === id
+    ) as PlatformAccessory<PartitionContext>;
     if (accessory) {
       this.removeAccessory(accessory);
     }
@@ -515,8 +526,9 @@ class ADCPlatform implements DynamicPlatformPlugin {
     service
       .getCharacteristic(hapCharacteristic.SecuritySystemTargetState)
       .on('get', (callback: CharacteristicGetCallback) => callback(null, accessory.context.desiredState))
-      .on('set', (value: CharacteristicValue,
-                  callback: CharacteristicSetCallback) => this.changePartitionState(accessory, value, callback));
+      .on('set', (value: CharacteristicValue, callback: CharacteristicSetCallback) =>
+        this.changePartitionState(accessory, value, callback)
+      );
 
     service
       .getCharacteristic(hapCharacteristic.StatusFault)
@@ -547,7 +559,9 @@ class ADCPlatform implements DynamicPlatformPlugin {
     }
 
     if (desiredState !== accessory.context.desiredState) {
-      this.log.info(`Updating partition ${name} (${id}), desiredState=${desiredState}, prev=${accessory.context.desiredState}`);
+      this.log.info(
+        `Updating partition ${name} (${id}), desiredState=${desiredState}, prev=${accessory.context.desiredState}`
+      );
 
       accessory.context.desiredState = desiredState;
       accessory
@@ -557,7 +571,9 @@ class ADCPlatform implements DynamicPlatformPlugin {
     }
 
     if (statusFault !== accessory.context.statusFault) {
-      this.log.info(`Updating partition ${name} (${id}), statusFault=${statusFault}, prev=${accessory.context.statusFault}`);
+      this.log.info(
+        `Updating partition ${name} (${id}), statusFault=${statusFault}, prev=${accessory.context.statusFault}`
+      );
 
       accessory.context.statusFault = statusFault;
       accessory
@@ -574,8 +590,11 @@ class ADCPlatform implements DynamicPlatformPlugin {
    * @param value
    * @param callback
    */
-  async changePartitionState(accessory: PlatformAccessory<PartitionContext>, value: CharacteristicValue,
-                             callback: CharacteristicSetCallback): Promise<void> {
+  async changePartitionState(
+    accessory: PlatformAccessory<PartitionContext>,
+    value: CharacteristicValue,
+    callback: CharacteristicSetCallback
+  ): Promise<void> {
     const id = accessory.context.accID;
     let method: typeof armAway | typeof armStay | typeof disarm;
     const opts = {} as any;
@@ -614,11 +633,11 @@ class ADCPlatform implements DynamicPlatformPlugin {
     accessory.context.desiredState = value;
 
     await this.loginSession()
-      .then(res => method(id, res, opts))
-      .then(res => res.data)
-      .then(partition => this.statPartitionState(accessory, partition))
-      .then(_ => callback()) // need to determine why we need this
-      .catch(err => {
+      .then((res) => method(id, res, opts))
+      .then((res) => res.data)
+      .then((partition) => this.statPartitionState(accessory, partition))
+      .then((_) => callback()) // need to determine why we need this
+      .catch((err) => {
         this.log.error(`Error: Failed to change partition state: ${err.stack}`);
         this.refreshDevices();
         callback(err);
@@ -635,7 +654,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
    */
   addSensor(sensor: SensorState): void {
     const id = sensor.id;
-    let accessory = this.accessories.find(a => a.context.accID === id) as PlatformAccessory<SensorContext>;
+    let accessory = this.accessories.find((a) => a.context.accID === id) as PlatformAccessory<SensorContext>;
     // in an ideal world, homebridge shouldn't be restarted too often
     // so upon starting we clean dist the cache of alarm accessories
     if (accessory) {
@@ -644,7 +663,9 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
     const [type, , model] = getSensorType(sensor);
     if (type === undefined) {
-      this.log.warn(`Warning: Sensor ${sensor.attributes.description} has unknown state ${sensor.attributes.state} (${sensor.id})`);
+      this.log.warn(
+        `Warning: Sensor ${sensor.attributes.description} has unknown state ${sensor.attributes.state} (${sensor.id})`
+      );
       return;
     }
 
@@ -723,30 +744,22 @@ class ADCPlatform implements DynamicPlatformPlugin {
     const batteryLow = Boolean(sensor.attributes.lowBattery || sensor.attributes.criticalBattery);
     const [type, characteristic, model] = getSensorType(sensor);
 
-
     if (state !== accessory.context.state) {
       this.log.info(`Updating sensor ${name} (${model}) (${id}), state=${state}, prev=${accessory.context.state}`);
 
       accessory.context.state = state;
-      accessory
-        .getService(type)!
-        .getCharacteristic(characteristic)
-        .updateValue(state);
+      accessory.getService(type)!.getCharacteristic(characteristic).updateValue(state);
     }
 
     if (batteryLow !== accessory.context.batteryLow) {
       this.log.info(`Updating sensor ${name} (${id}), batteryLow=${batteryLow}, prev=${accessory.context.batteryLow}`);
 
       accessory.context.batteryLow = batteryLow;
-      accessory
-        .getService(type)!
-        .getCharacteristic(hapCharacteristic.StatusLowBattery)
-        .updateValue(batteryLow);
+      accessory.getService(type)!.getCharacteristic(hapCharacteristic.StatusLowBattery).updateValue(batteryLow);
     }
   }
 
   /* Sensors only report state, no ability to change their state. */
-
 
   // Light Methods /////////////////////////////////////////////////////////
 
@@ -758,17 +771,16 @@ class ADCPlatform implements DynamicPlatformPlugin {
    */
   addLight(light: LightState): void {
     const id = light.id;
-    let accessory = this.accessories.find(accessory => accessory.context.accID === id) as PlatformAccessory<LightContext>;
+    let accessory = this.accessories.find(
+      (accessory) => accessory.context.accID === id
+    ) as PlatformAccessory<LightContext>;
     // in an ideal world, homebridge shouldn't be restarted too often
     // so upon starting we clean dist the cache of alarm accessories
     if (accessory) {
       this.removeAccessory(accessory);
     }
 
-    const [type, model] = [
-      hapService.Lightbulb,
-      'Light'
-    ];
+    const [type, model] = [hapService.Lightbulb, 'Light'];
 
     const name = light.attributes.description;
     const uuid = uuidGen.generate(id);
@@ -786,7 +798,9 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
     // if the light id is not in the ignore list in the homebridge config
     if (!this.ignoredDevices.includes(id)) {
-      this.log.info(`Adding ${model} "${name}" (id=${id}, uuid=${uuid}) (${accessory.context.state} ${accessory.context.desiredState})`);
+      this.log.info(
+        `Adding ${model} "${name}" (id=${id}, uuid=${uuid}) (${accessory.context.state} ${accessory.context.desiredState})`
+      );
 
       this.addAccessory(accessory, type, model);
       this.setupLight(accessory);
@@ -849,7 +863,11 @@ class ADCPlatform implements DynamicPlatformPlugin {
    * @param light  The light accessory parameters from Alarm.com.
    * @param callback
    */
-  statLightState(accessory: PlatformAccessory<LightContext>, light: LightState, callback?: CharacteristicSetCallback): void {
+  statLightState(
+    accessory: PlatformAccessory<LightContext>,
+    light: LightState,
+    callback?: CharacteristicSetCallback
+  ): void {
     const id = accessory.context.accID;
     const name = accessory.context.name;
     const newState = getLightState(light.attributes.state);
@@ -860,14 +878,12 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
       accessory.context.state = newState;
 
-      accessory.getService(hapService.Lightbulb)!
-        .updateCharacteristic(hapCharacteristic.On, newState);
+      accessory.getService(hapService.Lightbulb)!.updateCharacteristic(hapCharacteristic.On, newState);
     }
 
     if (accessory.context.isDimmer && newBrightness !== accessory.context.lightLevel) {
       accessory.context.lightLevel = newBrightness;
-      accessory.getService(hapService.Lightbulb)!
-        .updateCharacteristic(hapCharacteristic.Brightness, newBrightness);
+      accessory.getService(hapService.Lightbulb)!.updateCharacteristic(hapCharacteristic.Brightness, newBrightness);
     }
 
     if (callback !== null) {
@@ -883,8 +899,11 @@ class ADCPlatform implements DynamicPlatformPlugin {
    *    works with dimmers).
    * @param callback
    */
-  async changeLightBrightness(accessory: PlatformAccessory<LightContext>, brightness: number,
-                              callback: CharacteristicSetCallback): Promise<void> {
+  async changeLightBrightness(
+    accessory: PlatformAccessory<LightContext>,
+    brightness: number,
+    callback: CharacteristicSetCallback
+  ): Promise<void> {
     const id = accessory.context.accID;
 
     this.log.info(`Changing light (${accessory.context.accID}, light level ${brightness})`);
@@ -892,12 +911,12 @@ class ADCPlatform implements DynamicPlatformPlugin {
     accessory.context.lightLevel = brightness;
 
     await this.loginSession()
-      .then(res => setLightOn(id, res, accessory.context.lightLevel, accessory.context.isDimmer))
-      .then(res => res.data)
-      .then(light => {
+      .then((res) => setLightOn(id, res, accessory.context.lightLevel, accessory.context.isDimmer))
+      .then((res) => res.data)
+      .then((light) => {
         this.statLightState(accessory, light, callback);
       })
-      .catch(err => {
+      .catch((err) => {
         this.log.error(`Error: Failed to change light state: ${err.stack}`);
         this.refreshDevices();
         callback(err);
@@ -911,8 +930,11 @@ class ADCPlatform implements DynamicPlatformPlugin {
    * @param {boolean} desiredState  Value representing off or on states of the light.
    * @param callback
    */
-  async changeLight(accessory: PlatformAccessory<LightContext>, desiredState: boolean,
-                    callback: CharacteristicSetCallback): Promise<void> {
+  async changeLight(
+    accessory: PlatformAccessory<LightContext>,
+    desiredState: boolean,
+    callback: CharacteristicSetCallback
+  ): Promise<void> {
     // Alarm.com expects a single call for both brightness and 'on'
     // We need to ignore the extra call when changing brightness from homekit.
     if (desiredState === accessory.context.state) {
@@ -934,18 +956,17 @@ class ADCPlatform implements DynamicPlatformPlugin {
     accessory.context.state = desiredState;
 
     await this.loginSession()
-      .then(res => method(id, res, accessory.context.lightLevel ?? 100, accessory.context.isDimmer))
-      .then(res => res.data)
-      .then(light => {
+      .then((res) => method(id, res, accessory.context.lightLevel ?? 100, accessory.context.isDimmer))
+      .then((res) => res.data)
+      .then((light) => {
         this.statLightState(accessory, light, callback);
       })
-      .catch(err => {
+      .catch((err) => {
         this.log.error(`Error: Failed to change light state: ${err.stack}`);
         this.refreshDevices();
         callback(err);
       });
   }
-
 
   // Lock Methods /////////////////////////////////////////////////////////
 
@@ -957,17 +978,16 @@ class ADCPlatform implements DynamicPlatformPlugin {
    */
   addLock(lock: LockState): void {
     const id = lock.id;
-    let accessory = this.accessories.find(accessory => accessory.context.accID === id) as PlatformAccessory<LockContext>;
+    let accessory = this.accessories.find(
+      (accessory) => accessory.context.accID === id
+    ) as PlatformAccessory<LockContext>;
     // in an ideal world, homebridge shouldn't be restarted too often
     // so upon starting we clean dist the cache of alarm accessories
     if (accessory) {
       this.removeAccessory(accessory);
     }
 
-    const [type, model] = [
-      hapService.LockMechanism,
-      'Door Lock'
-    ];
+    const [type, model] = [hapService.LockMechanism, 'Door Lock'];
 
     const name = lock.attributes.description;
     const uuid = uuidGen.generate(id);
@@ -983,7 +1003,9 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
     // if the lock id is not in the ignore list in the homebridge config
     if (!this.ignoredDevices.includes(id)) {
-      this.log.info(`Adding ${model} "${name}" (id=${id}, uuid=${uuid}) (${accessory.context.state} ${accessory.context.desiredState})`);
+      this.log.info(
+        `Adding ${model} "${name}" (id=${id}, uuid=${uuid}) (${accessory.context.state} ${accessory.context.desiredState})`
+      );
 
       this.addAccessory(accessory, type, model);
       this.setupLock(accessory);
@@ -1002,10 +1024,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
     const id = accessory.context.accID;
     const name = accessory.context.name;
     const model = accessory.context.lockType;
-    const [type, characteristic] = [
-      hapService.LockMechanism,
-      hapCharacteristic.LockCurrentState
-    ];
+    const [type, characteristic] = [hapService.LockMechanism, hapCharacteristic.LockCurrentState];
     if (!characteristic && this.logLevel > 1) {
       throw new Error(`Unrecognized lock ${accessory.context.accID}`);
     }
@@ -1033,17 +1052,16 @@ class ADCPlatform implements DynamicPlatformPlugin {
       throw new Error(`Trouble getting service for ${accessory.context.accID}`);
     }
 
-    service
-      .getCharacteristic(hapCharacteristic.LockCurrentState)
-      .on('get', (callback: CharacteristicGetCallback) => {
-        callback(null, accessory.context.state);
-      });
+    service.getCharacteristic(hapCharacteristic.LockCurrentState).on('get', (callback: CharacteristicGetCallback) => {
+      callback(null, accessory.context.state);
+    });
 
     service
       .getCharacteristic(hapCharacteristic.LockTargetState)
       .on('get', (callback: CharacteristicGetCallback) => callback(null, accessory.context.desiredState))
-      .on('set', (value: CharacteristicValue,
-                  callback: CharacteristicSetCallback) => this.changeLockState(accessory, value, callback));
+      .on('set', (value: CharacteristicValue, callback: CharacteristicSetCallback) =>
+        this.changeLockState(accessory, value, callback)
+      );
   }
 
   /**
@@ -1068,16 +1086,12 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
       accessory.context.state = state;
 
-      service
-        .getCharacteristic(hapCharacteristic.LockCurrentState)
-        .updateValue(state);
+      service.getCharacteristic(hapCharacteristic.LockCurrentState).updateValue(state);
     }
 
     if (desiredState !== accessory.context.desiredState) {
       accessory.context.desiredState = desiredState;
-      service
-        .getCharacteristic(hapCharacteristic.LockTargetState)
-        .updateValue(desiredState);
+      service.getCharacteristic(hapCharacteristic.LockTargetState).updateValue(desiredState);
     }
   }
 
@@ -1089,8 +1103,11 @@ class ADCPlatform implements DynamicPlatformPlugin {
    *   lock.
    * @param callback
    */
-  async changeLockState(accessory: PlatformAccessory<LockContext>, value: CharacteristicValue,
-                        callback: CharacteristicSetCallback): Promise<void> {
+  async changeLockState(
+    accessory: PlatformAccessory<LockContext>,
+    value: CharacteristicValue,
+    callback: CharacteristicSetCallback
+  ): Promise<void> {
     const id = accessory.context.accID;
     let method: typeof setLockSecure | typeof setLockUnsecure;
 
@@ -1113,13 +1130,13 @@ class ADCPlatform implements DynamicPlatformPlugin {
     accessory.context.desiredState = value;
 
     await this.loginSession()
-      .then(res => method(id, res))
-      .then(res => res.data)
-      .then(lock => {
+      .then((res) => method(id, res))
+      .then((res) => res.data)
+      .then((lock) => {
         this.statLockState(accessory, lock);
       })
-      .then(_ => callback())
-      .catch(err => {
+      .then((_) => callback())
+      .catch((err) => {
         this.log.error(`Error: Failed to change lock state: ${err.stack}`);
         this.refreshDevices();
         callback(err);
@@ -1130,17 +1147,16 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
   addGarage(garage: GarageState): void {
     const id = garage.id;
-    let accessory = this.accessories.find(accessory => accessory.context.accID === id) as PlatformAccessory<GarageContext>;
+    let accessory = this.accessories.find(
+      (accessory) => accessory.context.accID === id
+    ) as PlatformAccessory<GarageContext>;
     // in an ideal world, homebridge shouldn't be restarted too often
     // so upon starting we clean dist the cache of alarm accessories
     if (accessory) {
       this.removeAccessory(accessory);
     }
 
-    const [type, model] = [
-      hapService.GarageDoorOpener,
-      'Garage Door'
-    ];
+    const [type, model] = [hapService.GarageDoorOpener, 'Garage Door'];
 
     const name = garage.attributes.description;
     const uuid = uuidGen.generate(id);
@@ -1156,7 +1172,9 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
     // if the garage id is not in the ignore list in the homebridge config
     if (!this.ignoredDevices.includes(id)) {
-      this.log.info(`Adding ${model} "${name}" (id=${id}, uuid=${uuid}) (${accessory.context.state} ${accessory.context.desiredState})`);
+      this.log.info(
+        `Adding ${model} "${name}" (id=${id}, uuid=${uuid}) (${accessory.context.state} ${accessory.context.desiredState})`
+      );
 
       this.addAccessory(accessory, type, model);
       this.setupGarage(accessory);
@@ -1182,7 +1200,8 @@ class ADCPlatform implements DynamicPlatformPlugin {
     }
 
     // Setup HomeKit accessory information
-    accessory.getService(hapService.AccessoryInformation)!
+    accessory
+      .getService(hapService.AccessoryInformation)!
       .setCharacteristic(hapCharacteristic.Manufacturer, MANUFACTURER)
       .setCharacteristic(hapCharacteristic.Model, model)
       .setCharacteristic(hapCharacteristic.SerialNumber, id);
@@ -1199,17 +1218,16 @@ class ADCPlatform implements DynamicPlatformPlugin {
       throw new Error(`Trouble getting HomeKit accessory information for ${accessory.context.accID}`);
     }
 
-    service
-      .getCharacteristic(hapCharacteristic.CurrentDoorState)
-      .on('get', (callback: CharacteristicGetCallback) => {
-        callback(null, accessory.context.state);
-      });
+    service.getCharacteristic(hapCharacteristic.CurrentDoorState).on('get', (callback: CharacteristicGetCallback) => {
+      callback(null, accessory.context.state);
+    });
 
     service
       .getCharacteristic(hapCharacteristic.TargetDoorState)
       .on('get', (callback: CharacteristicGetCallback) => callback(null, accessory.context.desiredState))
-      .on('set', (value: CharacteristicValue,
-                  callback: CharacteristicSetCallback) => this.changeGarageState(accessory, value, callback));
+      .on('set', (value: CharacteristicValue, callback: CharacteristicSetCallback) =>
+        this.changeGarageState(accessory, value, callback)
+      );
   }
 
   statGarageState(accessory: PlatformAccessory<GarageContext>, garage: GarageState): void {
@@ -1247,8 +1265,11 @@ class ADCPlatform implements DynamicPlatformPlugin {
    * @param callback
    */
 
-  async changeGarageState(accessory: PlatformAccessory<GarageContext>, value: CharacteristicValue,
-                          callback: CharacteristicSetCallback): Promise<void> {
+  async changeGarageState(
+    accessory: PlatformAccessory<GarageContext>,
+    value: CharacteristicValue,
+    callback: CharacteristicSetCallback
+  ): Promise<void> {
     const id = accessory.context.accID;
     let method: typeof openGarage | typeof closeGarage;
 
@@ -1273,13 +1294,13 @@ class ADCPlatform implements DynamicPlatformPlugin {
     accessory.context.desiredState = value;
 
     await this.loginSession()
-      .then(res => method(id, res)) // Usually 20-30 seconds
-      .then(res => res.data)
-      .then(garage => {
+      .then((res) => method(id, res)) // Usually 20-30 seconds
+      .then((res) => res.data)
+      .then((garage) => {
         this.statGarageState(accessory, garage);
       })
-      .then(_ => callback())
-      .catch(err => {
+      .then((_) => callback())
+      .catch((err) => {
         this.log.error(`Error: Failed to change garage state: ${err.stack}`);
         this.refreshDevices();
         callback(err);
@@ -1304,13 +1325,12 @@ class ADCPlatform implements DynamicPlatformPlugin {
     accessory.addService(type, name);
 
     // Register new accessory in HomeKit
-    if (this.accessories.findIndex(accessory => accessory.context.accID === id) > -1) {
+    if (this.accessories.findIndex((accessory) => accessory.context.accID === id) > -1) {
       this.api.registerPlatformAccessories(PLUGIN_ID, PLUGIN_NAME, [accessory]);
     } else {
       this.log.warn(`Preventing adding existing accessory ${name} with id ${id}`);
     }
   }
-
 
   /**
    * Removes accessories from the platform, homebridge and HomeKit.
@@ -1332,7 +1352,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
    * Useful for updating homebridge with the list of accessories present.
    */
   removeAccessories(): void {
-    this.accessories.forEach(accessory => this.removeAccessory(accessory));
+    this.accessories.forEach((accessory) => this.removeAccessory(accessory));
   }
 
   /**
@@ -1349,25 +1369,33 @@ class ADCPlatform implements DynamicPlatformPlugin {
     const name = this.config.name;
     const prefix = '[' + formattedDateTime + '] [' + name + '] ';
 
-    fs.mkdir(path.dirname(payloadLogPath), {
-      recursive: true
-    }, (err) => {
-      if (err) {
-        console.log(prefix + err);
-      } else {
-        fs.writeFile(payloadLogPath + payloadLogName, payload, {
-          flag: 'w+'
-        }, (err) => {
-          if (err) {
-            console.log(prefix + err);
-          } else {
-            console.log(prefix + payloadLogPath + payloadLogName + ' written');
-          }
-        });
+    fs.mkdir(
+      path.dirname(payloadLogPath),
+      {
+        recursive: true
+      },
+      (err) => {
+        if (err) {
+          console.log(prefix + err);
+        } else {
+          fs.writeFile(
+            payloadLogPath + payloadLogName,
+            payload,
+            {
+              flag: 'w+'
+            },
+            (err) => {
+              if (err) {
+                console.log(prefix + err);
+              } else {
+                console.log(prefix + payloadLogPath + payloadLogName + ' written');
+              }
+            }
+          );
+        }
       }
-    });
+    );
   }
-
 }
 
 /**
@@ -1512,73 +1540,33 @@ function getSensorType(sensor: SensorState): Array<any> {
 
   switch (type) {
     case SensorType.Motion_Sensor:
-      return [
-        hapService.MotionSensor,
-        hapCharacteristic.MotionDetected,
-        'Motion Sensor'
-      ];
+      return [hapService.MotionSensor, hapCharacteristic.MotionDetected, 'Motion Sensor'];
     case SensorType.Smoke_Detector:
     case SensorType.Heat_Detector:
-      return [
-        hapService.SmokeSensor,
-        hapCharacteristic.SmokeDetected,
-        'Heat Sensor'
-      ];
+      return [hapService.SmokeSensor, hapCharacteristic.SmokeDetected, 'Heat Sensor'];
     case SensorType.CO_Detector:
-      return [
-        hapService.CarbonMonoxideSensor,
-        hapCharacteristic.CarbonMonoxideDetected,
-        'Carbon Monoxide Detector'
-      ];
+      return [hapService.CarbonMonoxideSensor, hapCharacteristic.CarbonMonoxideDetected, 'Carbon Monoxide Detector'];
     case SensorType.Fob:
-      return [
-        hapService.AccessControl,
-        hapCharacteristic.RemoteKey,
-        'Key fob'
-      ];
+      return [hapService.AccessControl, hapCharacteristic.RemoteKey, 'Key fob'];
     case SensorType.Water_Sensor:
-      return [
-        hapService.LeakSensor,
-        hapCharacteristic.LeakDetected,
-        'Water Sensor'
-      ];
+      return [hapService.LeakSensor, hapCharacteristic.LeakDetected, 'Water Sensor'];
     case SensorType.Contact_Sensor:
-      return [
-        hapService.ContactSensor,
-        hapCharacteristic.ContactSensorState,
-        'Contact Sensor'
-      ];
+      return [hapService.ContactSensor, hapCharacteristic.ContactSensorState, 'Contact Sensor'];
     // On default, fall back to the old way of detecting sensor types. This will ensure we don't lose some
     //  devices we don't have types for
     default:
       switch (state) {
         case SENSOR_STATES.CLOSED:
         case SENSOR_STATES.OPEN:
-          return [
-            hapService.ContactSensor,
-            hapCharacteristic.ContactSensorState,
-            'Contact Sensor'
-          ];
+          return [hapService.ContactSensor, hapCharacteristic.ContactSensorState, 'Contact Sensor'];
         case SENSOR_STATES.IDLE:
         case SENSOR_STATES.ACTIVE:
-          return [
-            hapService.OccupancySensor,
-            hapCharacteristic.OccupancyDetected,
-            'Occupancy Sensor'
-          ];
+          return [hapService.OccupancySensor, hapCharacteristic.OccupancyDetected, 'Occupancy Sensor'];
         case SENSOR_STATES.DRY:
         case SENSOR_STATES.WET:
-          return [
-            hapService.LeakSensor,
-            hapCharacteristic.LeakDetected,
-            'Leak Sensor'
-          ];
+          return [hapService.LeakSensor, hapCharacteristic.LeakDetected, 'Leak Sensor'];
         default:
-          return [
-            undefined,
-            undefined,
-            undefined
-          ];
+          return [undefined, undefined, undefined];
       }
   }
 }
@@ -1592,45 +1580,21 @@ function getSensorType(sensor: SensorState): Array<any> {
 function sensorModelToType(model: string): Array<any> {
   switch (model) {
     case 'Contact Sensor':
-      return [
-        hapService.ContactSensor,
-        hapCharacteristic.ContactSensorState
-      ];
+      return [hapService.ContactSensor, hapCharacteristic.ContactSensorState];
     case 'Occupancy Sensor':
-      return [
-        hapService.OccupancySensor,
-        hapCharacteristic.OccupancyDetected
-      ];
+      return [hapService.OccupancySensor, hapCharacteristic.OccupancyDetected];
     case 'Leak Sensor':
-      return [
-        hapService.LeakSensor,
-        hapCharacteristic.LeakDetected
-      ];
+      return [hapService.LeakSensor, hapCharacteristic.LeakDetected];
     case 'Key fob':
-      return [
-        hapService.AccessControl,
-        hapCharacteristic.RemoteKey
-      ];
+      return [hapService.AccessControl, hapCharacteristic.RemoteKey];
     case 'Carbon Monoxide Detector':
-      return [
-        hapService.CarbonMonoxideSensor,
-        hapCharacteristic.CarbonMonoxideDetected
-      ];
+      return [hapService.CarbonMonoxideSensor, hapCharacteristic.CarbonMonoxideDetected];
     case 'Smoke Detector':
     case 'Heat Sensor':
-      return [
-        hapService.SmokeSensor,
-        hapCharacteristic.SmokeDetected
-      ];
+      return [hapService.SmokeSensor, hapCharacteristic.SmokeDetected];
     case 'Motion Sensor':
-      return [
-        hapService.MotionSensor,
-        hapCharacteristic.MotionDetected
-      ];
+      return [hapService.MotionSensor, hapCharacteristic.MotionDetected];
     default:
-      return [
-        undefined,
-        undefined
-      ];
+      return [undefined, undefined];
   }
 }

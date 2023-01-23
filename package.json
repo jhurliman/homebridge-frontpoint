@@ -60,6 +60,8 @@
     "@typescript-eslint/eslint-plugin": "^5.48.2",
     "@typescript-eslint/parser": "^5.48.2",
     "eslint": "8.22.0",
+    "eslint-config-prettier": "^8.6.0",
+    "eslint-plugin-prettier": "^4.2.1",
     "homebridge": "^1.6.0",
     "homebridge-config-ui-x": "latest",
     "rimraf": "^4.1.1",
