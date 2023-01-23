@@ -636,7 +636,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
       .then((res) => method(id, res, opts))
       .then((res) => res.data)
       .then((partition) => this.statPartitionState(accessory, partition))
-      .then((_) => callback()) // need to determine why we need this
+      .then(() => callback()) // need to determine why we need this
       .catch((err) => {
         this.log.error(`Error: Failed to change partition state: ${err.stack}`);
         this.refreshDevices();
@@ -1135,7 +1135,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
       .then((lock) => {
         this.statLockState(accessory, lock);
       })
-      .then((_) => callback())
+      .then(() => callback())
       .catch((err) => {
         this.log.error(`Error: Failed to change lock state: ${err.stack}`);
         this.refreshDevices();
@@ -1299,7 +1299,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
       .then((garage) => {
         this.statGarageState(accessory, garage);
       })
-      .then((_) => callback())
+      .then(() => callback())
       .catch((err) => {
         this.log.error(`Error: Failed to change garage state: ${err.stack}`);
         this.refreshDevices();
@@ -1375,9 +1375,11 @@ class ADCPlatform implements DynamicPlatformPlugin {
         recursive: true
       },
       (err) => {
+        // Log if there was an error creating the payload directory
         if (err) {
-          console.log(prefix + err);
+          this.log.error(prefix + err);
         } else {
+          // Otherwise, we can attempt to write the payload
           fs.writeFile(
             payloadLogPath + payloadLogName,
             payload,
@@ -1386,9 +1388,9 @@ class ADCPlatform implements DynamicPlatformPlugin {
             },
             (err) => {
               if (err) {
-                console.log(prefix + err);
+                this.log.error(prefix + err);
               } else {
-                console.log(prefix + payloadLogPath + payloadLogName + ' written');
+                this.log.debug(prefix + payloadLogPath + payloadLogName + ' written');
               }
             }
           );
