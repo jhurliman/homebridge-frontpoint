@@ -305,7 +305,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
     if (now > this.authOpts.expires) {
       this.log.info(`Logging into Alarm.com as ${this.config.username}`);
       //const authOpts = await login(this.config.username, this.config.password, this.mfaToken);
-      await login(this.config.username, this.config.password, this.mfaToken)
+      await login(this.config.username, this.config.password, this.useMFA ? this.mfaToken : null)
         .then((authOpts) => {
           // Cache login response and estimated expiration time
           authOpts.expires = +new Date() + 1000 * 60 * this.config.authTimeoutMinutes;
