@@ -1055,8 +1055,8 @@ class ADCPlatform implements DynamicPlatformPlugin {
   statLockState(accessory: PlatformAccessory<LockContext>, lock: LockState): void {
     const id = accessory.context.accID;
     const name = accessory.context.name;
-    const state = getLockState(lock.attributes.state);
-    const desiredState = getLockState(lock.attributes.desiredState);
+    const state = getLockCurrentState(lock.attributes.state);
+    const desiredState = getLockTargetState(lock.attributes.desiredState);
     const service = accessory.getService(hapService.LockMechanism);
 
     if (service === undefined) {
@@ -1454,7 +1454,7 @@ function getLightState(state: number): CharacteristicValue {
  * @param state  The state as defined by Alarm.com.
  * @returns {number|*}  The state as defines it.
  */
-function getLockState(state: number): CharacteristicValue {
+function getLockCurrentState(state: number): CharacteristicValue {
   switch (state) {
     case LOCK_STATES.UNSECURED:
       return hapCharacteristic.LockCurrentState.UNSECURED;
@@ -1462,6 +1462,24 @@ function getLockState(state: number): CharacteristicValue {
       return hapCharacteristic.LockCurrentState.SECURED;
     default:
       return hapCharacteristic.LockCurrentState.UNKNOWN;
+  }
+}
+
+/**
+ * Maps an Alarm.com lock state to its counterpart.
+ *
+ * @param state  The state as defined by Alarm.com.
+ * @returns {number|*}  The state as defines it.
+ */
+function getLockTargetState(state: LOCK_STATES): CharacteristicValue {
+  switch (state) {
+    case LOCK_STATES.UNSECURED:
+      return hapCharacteristic.LockTargetState.UNSECURED;
+    case LOCK_STATES.SECURED:
+      return hapCharacteristic.LockTargetState.SECURED;
+    // If the lock is in an unknown state, we want it to come back online locked for security.
+    default:
+      return hapCharacteristic.LockTargetState.SECURED;
   }
 }
 
