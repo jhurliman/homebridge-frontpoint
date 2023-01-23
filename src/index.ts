@@ -507,7 +507,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
     // Setup HomeKit accessory information
     accessory
-      .getService(hapService.AccessoryInformation)!
+      .getService(hapService.AccessoryInformation)
       .setCharacteristic(hapCharacteristic.Manufacturer, MANUFACTURER)
       .setCharacteristic(hapCharacteristic.Model, model)
       .setCharacteristic(hapCharacteristic.SerialNumber, id);
@@ -517,7 +517,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
       this.log.debug(`${name} identify requested`);
     });
 
-    const service = accessory.getService(hapService.SecuritySystem)!;
+    const service = accessory.getService(hapService.SecuritySystem);
 
     service
       .getCharacteristic(hapCharacteristic.SecuritySystemCurrentState)
@@ -553,7 +553,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
       accessory.context.state = state;
       accessory
-        .getService(hapService.SecuritySystem)!
+        .getService(hapService.SecuritySystem)
         .getCharacteristic(hapCharacteristic.SecuritySystemCurrentState)
         .updateValue(state);
     }
@@ -565,7 +565,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
       accessory.context.desiredState = desiredState;
       accessory
-        .getService(hapService.SecuritySystem)!
+        .getService(hapService.SecuritySystem)
         .getCharacteristic(hapCharacteristic.SecuritySystemTargetState)
         .updateValue(desiredState);
     }
@@ -577,7 +577,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
       accessory.context.statusFault = statusFault;
       accessory
-        .getService(hapService.SecuritySystem)!
+        .getService(hapService.SecuritySystem)
         .getCharacteristic(hapCharacteristic.StatusFault)
         .updateValue(statusFault);
     }
@@ -710,7 +710,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
     // Setup HomeKit accessory information
     accessory
-      .getService(hapService.AccessoryInformation)!
+      .getService(hapService.AccessoryInformation)
       .setCharacteristic(hapCharacteristic.Manufacturer, MANUFACTURER)
       .setCharacteristic(hapCharacteristic.Model, model)
       .setCharacteristic(hapCharacteristic.SerialNumber, id);
@@ -720,7 +720,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
       this.log.info(`${name} identify requested`);
     });
 
-    const service = accessory.getService(type)!;
+    const service = accessory.getService(type);
 
     service
       .getCharacteristic(characteristic)
@@ -748,14 +748,14 @@ class ADCPlatform implements DynamicPlatformPlugin {
       this.log.info(`Updating sensor ${name} (${model}) (${id}), state=${state}, prev=${accessory.context.state}`);
 
       accessory.context.state = state;
-      accessory.getService(type)!.getCharacteristic(characteristic).updateValue(state);
+      accessory.getService(type).getCharacteristic(characteristic).updateValue(state);
     }
 
     if (batteryLow !== accessory.context.batteryLow) {
       this.log.info(`Updating sensor ${name} (${id}), batteryLow=${batteryLow}, prev=${accessory.context.batteryLow}`);
 
       accessory.context.batteryLow = batteryLow;
-      accessory.getService(type)!.getCharacteristic(hapCharacteristic.StatusLowBattery).updateValue(batteryLow);
+      accessory.getService(type).getCharacteristic(hapCharacteristic.StatusLowBattery).updateValue(batteryLow);
     }
   }
 
@@ -823,7 +823,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
     // Setup HomeKit accessory information
     accessory
-      .getService(hapService.AccessoryInformation)!
+      .getService(hapService.AccessoryInformation)
       .setCharacteristic(hapCharacteristic.Manufacturer, MANUFACTURER)
       .setCharacteristic(hapCharacteristic.Model, model)
       .setCharacteristic(hapCharacteristic.SerialNumber, id);
@@ -833,7 +833,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
       this.log.info(`${name} identify requested`);
     });
 
-    const service = accessory.getService(type)!;
+    const service = accessory.getService(type);
 
     service
       .getCharacteristic(hapCharacteristic.On)
@@ -878,12 +878,12 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
       accessory.context.state = newState;
 
-      accessory.getService(hapService.Lightbulb)!.updateCharacteristic(hapCharacteristic.On, newState);
+      accessory.getService(hapService.Lightbulb).updateCharacteristic(hapCharacteristic.On, newState);
     }
 
     if (accessory.context.isDimmer && newBrightness !== accessory.context.lightLevel) {
       accessory.context.lightLevel = newBrightness;
-      accessory.getService(hapService.Lightbulb)!.updateCharacteristic(hapCharacteristic.Brightness, newBrightness);
+      accessory.getService(hapService.Lightbulb).updateCharacteristic(hapCharacteristic.Brightness, newBrightness);
     }
 
     if (callback !== null) {
@@ -1201,7 +1201,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
     // Setup HomeKit accessory information
     accessory
-      .getService(hapService.AccessoryInformation)!
+      .getService(hapService.AccessoryInformation)
       .setCharacteristic(hapCharacteristic.Manufacturer, MANUFACTURER)
       .setCharacteristic(hapCharacteristic.Model, model)
       .setCharacteristic(hapCharacteristic.SerialNumber, id);
@@ -1242,7 +1242,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
       accessory.context.state = state;
 
       accessory
-        .getService(hapService.GarageDoorOpener)!
+        .getService(hapService.GarageDoorOpener)
         .getCharacteristic(hapCharacteristic.CurrentDoorState)
         .updateValue(state);
     }
@@ -1250,7 +1250,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
     if (desiredState !== accessory.context.desiredState) {
       accessory.context.desiredState = desiredState;
       accessory
-        .getService(hapService.GarageDoorOpener)!
+        .getService(hapService.GarageDoorOpener)
         .getCharacteristic(hapCharacteristic.TargetDoorState)
         .updateValue(desiredState);
     }
