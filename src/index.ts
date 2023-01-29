@@ -1320,9 +1320,10 @@ class ADCPlatform implements DynamicPlatformPlugin {
     const id = accessory.context.accID;
     const name = accessory.context.name;
     this.accessories.push(accessory);
+    const serviceUUID = uuidGen.generate(id + type);
 
     // Setup HomeKit service
-    accessory.addService(type, name);
+    accessory.addService(type, name, serviceUUID);
 
     // Register new accessory in HomeKit
     if (this.accessories.findIndex((accessory) => accessory.context.accID === id) > -1) {
