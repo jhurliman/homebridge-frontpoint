@@ -1,12 +1,29 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="watch" type="js.build_tools.npm" nameIsGenerated="true">
+  <configuration default="false" name="Serve" type="js.build_tools.npm">
     <package-json value="$PROJECT_DIR$/../homebridge-node-alarm-dot-com/package.json" />
     <command value="run" />
     <scripts>
-      <script value="watch" />
+      <script value="start-dev" />
     </scripts>
     <node-interpreter value="project" />
     <envs />
-    <method v="2" />
+    <method v="2">
+      <option name="NpmBeforeRunTask" enabled="true">
+        <package-json value="$PROJECT_DIR$/package.json" />
+        <command value="link" />
+        <arguments value="node-alarm-dot-com" />
+        <node-interpreter value="project" />
+        <envs />
+      </option>
+      <option name="NpmBeforeRunTask" enabled="true">
+        <package-json value="$PROJECT_DIR$/package.json" />
+        <command value="run" />
+        <scripts>
+          <script value="build" />
+        </scripts>
+        <node-interpreter value="project" />
+        <envs />
+      </option>
+    </method>
   </configuration>
 </component>

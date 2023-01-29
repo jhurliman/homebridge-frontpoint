@@ -3,9 +3,7 @@ import {
   LightState,
   LockState,
   PartitionState,
-  Relationships,
-  SensorState,
-  SystemAttributes
+  SensorState
 } from 'node-alarm-dot-com';
 
 export interface SimplifiedSystemState {
