@@ -48,8 +48,8 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "engines": {
-    "node": ">=12.20.0",
-    "homebridge": ">=0.4.21"
+    "node": ">=16.0.0",
+    "homebridge": ">=1.4.0"
   },
   "dependencies": {
     "node-alarm-dot-com": "2.0.0",
