@@ -16,23 +16,19 @@ export class CustomLogger implements Logger {
   }
 
   info(message: string, ...parameters: any[]): void {
-    if (this.logLevel >= CustomLogLevel.NOTICE)
-      this.logger.info(message, ...parameters);
+    if (this.logLevel >= CustomLogLevel.NOTICE) this.logger.info(message, ...parameters);
   }
 
   warn(message: string, ...parameters: any[]): void {
-    if (this.logLevel >= CustomLogLevel.WARN)
-      this.logger.warn(message, ...parameters);
+    if (this.logLevel >= CustomLogLevel.WARN) this.logger.warn(message, ...parameters);
   }
 
   error(message: string, ...parameters: any[]): void {
-    if (this.logLevel >= CustomLogLevel.ERROR)
-      this.logger.error(message, ...parameters);
+    if (this.logLevel >= CustomLogLevel.ERROR) this.logger.error(message, ...parameters);
   }
 
   debug(message: string, ...parameters: any[]): void {
-    if (this.logLevel >= CustomLogLevel.VERBOSE)
-      this.logger.debug(message, ...parameters);
+    if (this.logLevel >= CustomLogLevel.VERBOSE) this.logger.debug(message, ...parameters);
   }
 
   /**
@@ -47,5 +43,9 @@ export class CustomLogger implements Logger {
 }
 
 export enum CustomLogLevel {
-  NONE, ERROR, WARN, NOTICE, VERBOSE
+  NONE,
+  ERROR,
+  WARN,
+  NOTICE,
+  VERBOSE
 }
