@@ -50,6 +50,11 @@ import { SimplifiedSystemState } from './_models/SimplifiedSystemState';
 import {
   BaseContext,
   GarageContext,
+  isGarage,
+  isLight,
+  isLock,
+  isPartition,
+  isSensor,
   LightContext,
   LockContext,
   PartitionContext,
@@ -187,7 +192,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
       }
     });
 
-    // We also want to unregister any accessories which need upgrading so they will be readded on the next pull
+    // We also want to unregister any accessories which need upgrading so they will be re-added on the next pull
     this.accessoriesToUpdate.forEach((accessory) => {
       this.removeAccessory(accessory);
     });
@@ -277,16 +282,16 @@ class ADCPlatform implements DynamicPlatformPlugin {
       }
     }
 
-    if (accessory.context.partitionType) {
-      this.setupPartition(accessory as PlatformAccessory<PartitionContext>);
-    } else if (accessory.context.sensorType) {
+    if (isPartition(accessory)) {
+      this.setupPartition(accessory);
+    } else if (isSensor(accessory)) {
       this.setupSensor(accessory);
-    } else if (accessory.context.lightType) {
-      this.setupLight(accessory as PlatformAccessory<LightContext>);
-    } else if (accessory.context.lockType) {
-      this.setupLock(accessory as PlatformAccessory<LockContext>);
-    } else if (accessory.context.garageType) {
-      this.setupGarage(accessory as PlatformAccessory<GarageContext>);
+    } else if (isLight(accessory)) {
+      this.setupLight(accessory);
+    } else if (isLock(accessory)) {
+      this.setupLock(accessory);
+    } else if (isGarage(accessory)) {
+      this.setupGarage(accessory);
     } else {
       this.log.warn(`Unrecognized accessory ${accessory.context.accID} loaded from cache`);
     }

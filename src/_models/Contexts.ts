@@ -1,8 +1,17 @@
-import { CharacteristicValue } from 'homebridge';
+import { CharacteristicValue, PlatformAccessory } from 'homebridge';
 import { SensorType } from 'node-alarm-dot-com';
 
+/**
+ * This is the information that is shared amongst all devices.
+ */
 export interface BaseContext {
+  /**
+   * accID is the ID assigned from Alarm.com.
+   */
   accID: string;
+  /**
+   * name is the description set with Alarm.com.
+   */
   name: string;
 }
 
@@ -54,3 +63,23 @@ export interface GarageContext extends BaseContext {
   desiredState: CharacteristicValue;
   garageType: string;
 }
+
+// Region: Function Casts
+
+export function isPartition(accessory: PlatformAccessory): accessory is PlatformAccessory<PartitionContext> {
+  return (accessory as PlatformAccessory<PartitionContext>).context.partitionType !== undefined;
+}
+export function isSensor(accessory: PlatformAccessory): accessory is PlatformAccessory<SensorContext> {
+  return (accessory as PlatformAccessory<SensorContext>).context.type !== undefined;
+}
+export function isLock(accessory: PlatformAccessory): accessory is PlatformAccessory<LockContext> {
+  return (accessory as PlatformAccessory<LockContext>).context.lockType !== undefined;
+}
+export function isLight(accessory: PlatformAccessory): accessory is PlatformAccessory<LightContext> {
+  return (accessory as PlatformAccessory<LightContext>).context.isDimmer !== undefined;
+}
+export function isGarage(accessory: PlatformAccessory): accessory is PlatformAccessory<GarageContext> {
+  return (accessory as PlatformAccessory<GarageContext>).context.garageType !== undefined;
+}
+
+// End Region
