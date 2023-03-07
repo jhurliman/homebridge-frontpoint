@@ -64,6 +64,16 @@ export interface GarageContext extends BaseContext {
   garageType: string;
 }
 
+export interface ThermostatContext extends BaseContext {
+  accID: string,
+  name: string,
+  state: CharacteristicValue,
+  desiredState: CharacteristicValue,
+  currentTemperature: CharacteristicValue,
+  targetTemperature: CharacteristicValue,
+  thermostatType: string,
+}
+
 // Region: Function Casts
 
 export function isPartition(accessory: PlatformAccessory): accessory is PlatformAccessory<PartitionContext> {
@@ -80,6 +90,9 @@ export function isLight(accessory: PlatformAccessory): accessory is PlatformAcce
 }
 export function isGarage(accessory: PlatformAccessory): accessory is PlatformAccessory<GarageContext> {
   return (accessory as PlatformAccessory<GarageContext>).context.garageType !== undefined;
+}
+export function isThermostat(accessory: PlatformAccessory): accessory is PlatformAccessory<ThermostatContext> {
+  return (accessory as PlatformAccessory<ThermostatContext>).context.thermostatType !== undefined;
 }
 
 // End Region

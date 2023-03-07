@@ -19,7 +19,8 @@ import {
   LIGHT_STATES,
   LOCK_STATES,
   SENSOR_STATES,
-  SYSTEM_STATES
+  SYSTEM_STATES,
+  THERMOSTAT_STATES
 } from 'node-alarm-dot-com/dist/_models/States';
 
 import path from 'path';
@@ -44,8 +45,12 @@ import {
   setLightOff,
   setLightOn,
   setLockSecure,
-  setLockUnsecure
-} from 'node-alarm-dot-com';
+  setLockUnsecure,
+  setThermostatState,
+  setThermostatTargetCoolTemperature,
+  setThermostatTargetHeatTemperature,
+  ThermostatState
+} from "node-alarm-dot-com";
 
 import { SimplifiedSystemState } from './_models/SimplifiedSystemState';
 import {
@@ -56,11 +61,13 @@ import {
   isLock,
   isPartition,
   isSensor,
+  isThermostat,
   LightContext,
   LockContext,
   PartitionContext,
-  SensorContext
-} from './_models/Contexts';
+  SensorContext,
+  ThermostatContext
+} from "./_models/Contexts";
 import { CustomLogger, CustomLogLevel } from './CustomLogger';
 
 let hap: HAP;
@@ -234,6 +241,8 @@ class ADCPlatform implements DynamicPlatformPlugin {
                     this.addLock(d as LockState);
                   } else if (realDeviceType === 'garage-door') {
                     this.addGarage(d as GarageState);
+                  } else if (realDeviceType === 'thermostat') {
+                    this.addThermostat(d as ThermostatState);
                   }
                   // add more devices here as available, ie. garage doors, etc
 
@@ -298,6 +307,8 @@ class ADCPlatform implements DynamicPlatformPlugin {
       this.setupLock(accessory);
     } else if (isGarage(accessory)) {
       this.setupGarage(accessory);
+    } else if (isThermostat(accessory)) {
+      this.setupThermostat(accessory);
     } else {
       this.log.warn(`Unrecognized accessory ${accessory.context.accID} loaded from cache`);
     }
@@ -345,6 +356,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
         out.lights = out.lights.concat(system.lights);
         out.locks = out.locks.concat(system.locks);
         out.garages = out.garages.concat(system.garages);
+        out.thermostats = out.thermostats.concat(system.thermostats);
         return out;
       },
       {
@@ -352,7 +364,8 @@ class ADCPlatform implements DynamicPlatformPlugin {
         sensors: [],
         lights: [],
         locks: [],
-        garages: []
+        garages: [],
+        thermostats: []
       }
     );
   }
@@ -466,6 +479,24 @@ class ADCPlatform implements DynamicPlatformPlugin {
           } else {
             this.log.info(
               'No garage doors found, ignore if expected, or check configuration with security system provider'
+            );
+          }
+
+          if (system.thermostats) {
+            system.thermostats.forEach((thermostat) => {
+              const accessory = this.accessories.find(
+                (accessory) => accessory.context.accID === thermostat.id
+              ) as PlatformAccessory<ThermostatContext>;
+              if (!this.ignoredDevices.includes(thermostat.id)) {
+                if (!accessory) {
+                  return this.addThermostat(thermostat);
+                }
+                this.statThermostatState(accessory, thermostat);
+              }
+            });
+          } else {
+            this.log.info(
+              'No thermostats found, ignore if expected, or check configuration with security system provider'
             );
           }
         });
@@ -1330,6 +1361,254 @@ class ADCPlatform implements DynamicPlatformPlugin {
       });
   }
 
+  // Thermostat Methods /////////////////////////////////////////////////////////
+
+  addThermostat(thermostat: ThermostatState): void {
+    const id = thermostat.id;
+    let accessory = this.accessories.find(
+      (accessory) => accessory.context.accID === id
+    ) as PlatformAccessory<ThermostatContext>;
+    // in an ideal world, homebridge shouldn't be restarted too often
+    // so upon starting we clean dist the cache of alarm accessories
+    if (accessory) {
+      this.removeAccessory(accessory);
+    }
+
+    const [type, model] = [hapService.Thermostat, 'Thermostat'];
+
+    const name = thermostat.attributes.description;
+    const uuid = uuidGen.generate(id);
+    accessory = new platformAccessory(name, uuid);
+
+    const currentTemperature = convertFtoC(thermostat.attributes.ambientTemp);
+
+    accessory.context = {
+      accID: id,
+      name: name,
+      thermostatType: model,
+      state: getThermostatState(thermostat.attributes.state),
+      desiredState: getThermostatState(thermostat.attributes.state),
+      currentTemperature: currentTemperature,
+      targetTemperature: getThermostatTargetTemperature(thermostat)
+    };
+
+    // if the thermostat id is not in the ignore list in the homebridge config
+    if (!this.ignoredDevices.includes(id)) {
+      this.log.info(`Adding ${model} "${name}" (id=${id}, uuid=${uuid}) (current temp: ${currentTemperature})`);
+
+      this.addAccessory(accessory, type, model);
+      this.setupThermostat(accessory);
+
+      // Set the initial garage state
+      this.statThermostatState(accessory, thermostat);
+    }
+  }
+
+  setupThermostat(accessory: PlatformAccessory<ThermostatContext>): void {
+    const id = accessory.context.accID;
+    const name = accessory.context.name;
+    const model = accessory.context.thermostatType;
+    const [type, characteristic] = [
+      hapService.Thermostat,
+      hapCharacteristic.TargetTemperature,
+      hapCharacteristic.CurrentTemperature,
+      hapCharacteristic.TargetHeatingCoolingState,
+      hapCharacteristic.CurrentHeatingCoolingState
+    ];
+
+    if (!characteristic && this.config.logLevel > 1) {
+      throw new Error(`Unrecognized thermostat ${accessory.context.accID}`);
+    }
+
+    // Setup HomeKit accessory information
+    accessory
+      .getService(hapService.AccessoryInformation)
+      .setCharacteristic(hapCharacteristic.Manufacturer, MANUFACTURER)
+      .setCharacteristic(hapCharacteristic.Model, model)
+      .setCharacteristic(hapCharacteristic.SerialNumber, id);
+
+    // Setup event listeners
+    // Todo: (paired, callback) causes troubles
+    accessory.on('identify', () => {
+      this.log.info(`${name} identify requested`);
+    });
+
+    const service = accessory.getService(type);
+
+    if (service === undefined) {
+      throw new Error(`Trouble getting HomeKit accessory information for ${accessory.context.accID}`);
+    }
+
+    service
+      .getCharacteristic(hapCharacteristic.CurrentHeatingCoolingState)
+      .on('get', (callback: CharacteristicGetCallback) => {
+        callback(null, accessory.context.state);
+      });
+
+    service
+      .getCharacteristic(hapCharacteristic.TargetHeatingCoolingState)
+      .on('get', (callback: CharacteristicGetCallback) => callback(null, accessory.context.desiredState))
+      .on('set', (value: CharacteristicValue, callback: CharacteristicSetCallback) =>
+        this.changeThermostatState(accessory, value, callback)
+      );
+
+    service.getCharacteristic(hapCharacteristic.CurrentTemperature).on('get', (callback: CharacteristicGetCallback) => {
+      callback(null, accessory.context.currentTemperature);
+    });
+
+    service
+      .getCharacteristic(hapCharacteristic.TargetTemperature)
+      .on('get', (callback: CharacteristicGetCallback) => callback(null, accessory.context.targetTemperature))
+      .on('set', (value: number, callback: CharacteristicSetCallback) =>
+        this.changeThermostatTargetTemperature(accessory, value, callback)
+      );
+  }
+
+  statThermostatState(accessory: PlatformAccessory<ThermostatContext>, thermostat: ThermostatState): void {
+    const id = accessory.context.accID;
+    const name = accessory.context.name;
+    const currentTemperature = convertFtoC(thermostat.attributes.ambientTemp);
+    const targetTemperature = getThermostatTargetTemperature(thermostat);
+    const currentState = getThermostatState(thermostat.attributes.state);
+    const targetState = getThermostatState(thermostat.attributes.desiredState);
+
+    if (currentTemperature !== accessory.context.currentTemperature) {
+      this.log.info(
+        `Updating thermostat ${name} (${id}), ambientTemp=${currentTemperature}, prev=${accessory.context.currentTemperature}`
+      );
+
+      accessory.context.currentTemperature = currentTemperature;
+
+      accessory
+        .getService(hapService.Thermostat)
+        .getCharacteristic(hapCharacteristic.CurrentTemperature)
+        .updateValue(currentTemperature);
+    }
+
+    if (targetTemperature && targetTemperature !== accessory.context.targetTemperature) {
+      this.log.info(
+        `Updating thermostat ${name} (${id}), targetTemp=${targetTemperature}, prev=${accessory.context.targetTemperature}`
+      );
+
+      accessory.context.targetTemperature = targetTemperature;
+
+      accessory
+        .getService(hapService.Thermostat)
+        .getCharacteristic(hapCharacteristic.TargetTemperature)
+        .updateValue(targetTemperature);
+    }
+
+    if (currentState !== accessory.context.state) {
+      this.log.info(`Updating thermostat ${name} (${id}), state=${currentState}, prev=${accessory.context.state}`);
+
+      accessory.context.state = currentState;
+
+      accessory
+        .getService(hapService.Thermostat)
+        .getCharacteristic(hapCharacteristic.CurrentHeatingCoolingState)
+        .updateValue(currentState);
+    }
+
+    if (targetState !== accessory.context.desiredState) {
+      this.log.info(
+        `Updating thermostat ${name} (${id}), targetState=${targetState}, prev=${accessory.context.desiredState}`
+      );
+
+      accessory.context.desiredState = targetState;
+
+      accessory
+        .getService(hapService.Thermostat)
+        .getCharacteristic(hapCharacteristic.TargetHeatingCoolingState)
+        .updateValue(targetState);
+    }
+  }
+
+  /**
+   * Change the physical state of a thermostat using the Alarm.com API.
+   *
+   * @param accessory  The thermostat to be changed.
+   * @param {boolean} value  Value representing thermostat state.
+   * @param callback
+   */
+
+  async changeThermostatState(
+    accessory: PlatformAccessory<ThermostatContext>,
+    value: CharacteristicValue,
+    callback: CharacteristicSetCallback
+  ): Promise<void> {
+    const id = accessory.context.accID;
+
+    this.log.info(`Thermostat ${accessory.context.accID}, state change: ${value}`);
+
+    accessory.context.desiredState = value;
+
+    let newState;
+    switch (value) {
+      case hapCharacteristic.CurrentHeatingCoolingState.HEAT:
+        newState = THERMOSTAT_STATES.HEATING;
+        break;
+      case hapCharacteristic.CurrentHeatingCoolingState.COOL:
+        newState = THERMOSTAT_STATES.COOLING;
+        break;
+      case hapCharacteristic.CurrentHeatingCoolingState.OFF:
+        newState = THERMOSTAT_STATES.OFF;
+        break;
+    }
+
+    await this.loginSession()
+      .then((res) => setThermostatState(id, newState, res)) // Usually 20-30 seconds
+      .then((res) => res.data)
+      .then((thermostat) => {
+        this.statThermostatState(accessory, thermostat);
+      })
+      .then(() => callback())
+      .catch((err) => {
+        this.log.error(`Error: Failed to change thermostat state: ${err.stack}`);
+        this.refreshDevices();
+        callback(err);
+      });
+  }
+
+  async changeThermostatTargetTemperature(
+    accessory: PlatformAccessory<ThermostatContext>,
+    value: number,
+    callback: CharacteristicSetCallback
+  ): Promise<void> {
+    const id = accessory.context.accID;
+    let method: typeof setThermostatTargetHeatTemperature | typeof setThermostatTargetCoolTemperature;
+
+    switch (accessory.context.state) {
+      case hapCharacteristic.CurrentHeatingCoolingState.HEAT:
+        method = setThermostatTargetHeatTemperature;
+        break;
+      case hapCharacteristic.CurrentHeatingCoolingState.COOL:
+        method = setThermostatTargetCoolTemperature;
+        break;
+      default: {
+        const msg = `Can't set temperature when in unknown state ${accessory.context.state}`;
+        this.log.error(msg);
+        return callback(new Error(msg));
+      }
+    }
+
+    this.log.info(`Thermostat ${accessory.context.accID}, temp change: ${value}`);
+
+    accessory.context.targetTemperature = value;
+
+    await this.loginSession()
+      .then((res) => method(id, convertCtoF(value), res)) // Usually 20-30 seconds
+      .then((res) => res.data)
+      .then((thermostat) => {
+        this.statThermostatState(accessory, thermostat);
+      })
+      .then(() => callback())
+      .catch((err) => {
+        this.log.error(`Error: Failed to change thermostat state: ${err.stack}`);
+        this.refreshDevices();
+        callback(err);
+      });
+  }
+
   // Accessory Methods /////////////////////////////////////////////////////////
 
   /**
@@ -1552,6 +1831,53 @@ function getGarageState(state: number): CharacteristicValue {
     default:
       return hapCharacteristic.CurrentDoorState.STOPPED;
   }
+}
+
+/**
+ * Maps an Alarm.com thermostat to its counterpart.
+ *
+ * @param state  The state as defined by Alarm.com.
+ * @returns {number|*}  The state as defines it.
+ */
+function getThermostatState(state: number): CharacteristicValue {
+  // Unknown how to handle THERMOSTAT_STATES.AUTO
+  switch (state) {
+    case THERMOSTAT_STATES.HEATING:
+      return hapCharacteristic.CurrentHeatingCoolingState.HEAT;
+    case THERMOSTAT_STATES.COOLING:
+      return hapCharacteristic.CurrentHeatingCoolingState.COOL;
+    case THERMOSTAT_STATES.OFF:
+    default:
+      return hapCharacteristic.CurrentHeatingCoolingState.OFF;
+  }
+}
+
+function getThermostatTargetTemperature(thermostat: ThermostatState): number {
+  switch (thermostat.attributes.desiredState) {
+    case THERMOSTAT_STATES.HEATING:
+      return convertFtoC(thermostat.attributes.desiredHeatSetpoint);
+    case THERMOSTAT_STATES.COOLING:
+      return convertFtoC(thermostat.attributes.desiredCoolSetpoint);
+    case THERMOSTAT_STATES.AUTO:
+    case THERMOSTAT_STATES.OFF:
+    default:
+      switch (thermostat.attributes.inferredState) {
+        case THERMOSTAT_STATES.HEATING:
+          return convertFtoC(thermostat.attributes.desiredHeatSetpoint);
+        case THERMOSTAT_STATES.COOLING:
+          return convertFtoC(thermostat.attributes.desiredCoolSetpoint);
+        default:
+          return null;
+      }
+  }
+}
+
+function convertFtoC(f: number): number {
+  return Math.round((5 / 9) * (f - 32));
+}
+
+function convertCtoF(c: number): number {
+  return Math.round((c * 9) / 5 + 32);
 }
 
 /**
