@@ -72,6 +72,8 @@ export interface ThermostatContext extends BaseContext {
   currentTemperature: CharacteristicValue,
   targetTemperature: CharacteristicValue,
   thermostatType: string,
+  supportsHumidity: boolean,
+  humidityLevel: CharacteristicValue,
 }
 
 // Region: Function Casts

@@ -1389,7 +1389,9 @@ class ADCPlatform implements DynamicPlatformPlugin {
       state: getThermostatState(thermostat.attributes.state),
       desiredState: getThermostatState(thermostat.attributes.state),
       currentTemperature: currentTemperature,
-      targetTemperature: getThermostatTargetTemperature(thermostat)
+      targetTemperature: getThermostatTargetTemperature(thermostat),
+      supportsHumidity: thermostat.attributes.supportsHumidity,
+      humidityLevel: thermostat.attributes.humidityLevel,
     };
 
     // if the thermostat id is not in the ignore list in the homebridge config
@@ -1413,7 +1415,8 @@ class ADCPlatform implements DynamicPlatformPlugin {
       hapCharacteristic.TargetTemperature,
       hapCharacteristic.CurrentTemperature,
       hapCharacteristic.TargetHeatingCoolingState,
-      hapCharacteristic.CurrentHeatingCoolingState
+      hapCharacteristic.CurrentHeatingCoolingState,
+      hapCharacteristic.CurrentRelativeHumidity
     ];
 
     if (!characteristic && this.config.logLevel > 1) {
@@ -1462,6 +1465,12 @@ class ADCPlatform implements DynamicPlatformPlugin {
       .on('set', (value: number, callback: CharacteristicSetCallback) =>
         this.changeThermostatTargetTemperature(accessory, value, callback)
       );
+
+    if (accessory.context.supportsHumidity) {
+      service
+        .getCharacteristic(hapCharacteristic.CurrentRelativeHumidity)
+        .on('get', (callback: CharacteristicGetCallback) => callback(null, accessory.context.humidityLevel));
+    }
   }
 
   statThermostatState(accessory: PlatformAccessory<ThermostatContext>, thermostat: ThermostatState): void {
@@ -1471,6 +1480,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
     const targetTemperature = getThermostatTargetTemperature(thermostat);
     const currentState = getThermostatState(thermostat.attributes.state);
     const targetState = getThermostatState(thermostat.attributes.desiredState);
+    const humidityLevel = thermostat.attributes.humidityLevel;
 
     if (currentTemperature !== accessory.context.currentTemperature) {
       this.log.info(
@@ -1520,6 +1530,17 @@ class ADCPlatform implements DynamicPlatformPlugin {
         .getService(hapService.Thermostat)
         .getCharacteristic(hapCharacteristic.TargetHeatingCoolingState)
         .updateValue(targetState);
+    }
+
+    if (accessory.context.supportsHumidity && humidityLevel !== accessory.context.humidityLevel) {
+      this.log.info(`Updating thermostat ${name} (${id}), humidity=${humidityLevel}, prev=${accessory.context.state}`);
+
+      accessory.context.humidityLevel = humidityLevel;
+
+      accessory
+        .getService(hapService.Thermostat)
+        .getCharacteristic(hapCharacteristic.CurrentRelativeHumidity)
+        .updateValue(humidityLevel);
     }
   }
 
