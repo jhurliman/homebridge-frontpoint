@@ -204,8 +204,8 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
         for (const device in res) {
           if (device === 'partitions' && typeof res[device][0] === 'undefined') {
-            // throw error if no partition, ideally this should never occur
-            throw new Error('Received no partitions from Alarm.com');
+            // Debug log if no partition. This can happen when someone doesn't have monitoring.
+            this.log.debug(`Received no partitions from Alarm.com.`);
           } else if (res[device].length > 0) {
             this.log.info(`Received ${res[device].length} ${device} from Alarm.com`);
 
