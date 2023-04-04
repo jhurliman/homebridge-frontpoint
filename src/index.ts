@@ -34,6 +34,7 @@ import {
   FlattenedSystemState,
   GarageState,
   getCurrentState,
+  getIdentitiesState,
   LightState,
   LockState,
   login,
@@ -101,6 +102,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
   private ignoredDevices: string[];
   private useMFA: boolean;
   private mfaToken?: string;
+  private localizeTempUnitsToCelsius: boolean;
 
   /**
    * The platform class constructor used when registering a plugin.
@@ -117,6 +119,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
     this.ignoredDevices = this.config.ignoredDevices ?? [];
     this.useMFA = this.config.useMFA ?? false;
     this.mfaToken = this.config.useMFA ? this.config.mfaCookie : null;
+    this.localizeTempUnitsToCelsius = this.config.localizeTempUnitsToCelsius ?? false;
 
     this.config.authTimeoutMinutes = this.config.authTimeoutMinutes ?? AUTH_TIMEOUT_MINS;
     this.config.pollTimeoutSeconds = this.config.pollTimeoutSeconds ?? POLL_TIMEOUT_SECS;
@@ -196,6 +199,9 @@ class ADCPlatform implements DynamicPlatformPlugin {
     this.accessoriesToUpdate.forEach((accessory) => {
       this.removeAccessory(accessory);
     });
+
+    // Retrieve global account information.
+    this.getAccountSettings();
 
     this.listDevices()
       .then((res) => {
@@ -349,6 +355,18 @@ class ADCPlatform implements DynamicPlatformPlugin {
         garages: []
       }
     );
+  }
+
+  /**
+   * This method makes a call to alarm.com in order to retrieve global account information.
+   */
+  async getAccountSettings() {
+    const authOpts = await this.loginSession();
+    const identities = await getIdentitiesState(authOpts.cookie, authOpts.ajaxKey);
+    const identity = identities.data[0];
+    if (identity) {
+      this.localizeTempUnitsToCelsius = identity.attributes.localizeTempUnitsToCelsius;
+    }
   }
 
   /**
