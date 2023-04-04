@@ -109,7 +109,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
   private ignoredDevices: string[];
   private useMFA: boolean;
   private mfaToken?: string;
-  private localizeTempUnitsToCelsius: boolean;
+  private tempDisplayUnitSetting: number;
 
   /**
    * The platform class constructor used when registering a plugin.
@@ -126,7 +126,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
     this.ignoredDevices = this.config.ignoredDevices ?? [];
     this.useMFA = this.config.useMFA ?? false;
     this.mfaToken = this.config.useMFA ? this.config.mfaCookie : null;
-    this.localizeTempUnitsToCelsius = this.config.localizeTempUnitsToCelsius ?? false;
+    this.tempDisplayUnitSetting = hapCharacteristic.TemperatureDisplayUnits.CELSIUS;
 
     this.config.authTimeoutMinutes = this.config.authTimeoutMinutes ?? AUTH_TIMEOUT_MINS;
     this.config.pollTimeoutSeconds = this.config.pollTimeoutSeconds ?? POLL_TIMEOUT_SECS;
@@ -190,7 +190,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
    * didFinishLaunching event, which in turn, launches the following
    * registerAlarmSystem method
    */
-  registerAlarmSystem() {
+  async registerAlarmSystem() {
     // First, let's unregister any restored devices the user wants to be ignored
     this.accessories.forEach((accessory) => {
       // If the device is ignored, we want to stop the restore
@@ -208,7 +208,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
     });
 
     // Retrieve global account information.
-    this.getAccountSettings();
+    await this.getAccountSettings();
 
     this.listDevices()
       .then((res) => {
@@ -378,7 +378,9 @@ class ADCPlatform implements DynamicPlatformPlugin {
     const identities = await getIdentitiesState(authOpts.cookie, authOpts.ajaxKey);
     const identity = identities.data[0];
     if (identity) {
-      this.localizeTempUnitsToCelsius = identity.attributes.localizeTempUnitsToCelsius;
+      this.tempDisplayUnitSetting = identity.attributes.localizeTempUnitsToCelsius
+        ? hapCharacteristic.TemperatureDisplayUnits.CELSIUS
+        : hapCharacteristic.TemperatureDisplayUnits.FAHRENHEIT;
     }
   }
 
@@ -386,6 +388,9 @@ class ADCPlatform implements DynamicPlatformPlugin {
    * Method to update state on accessories/devices.
    */
   async refreshDevices(): Promise<void> {
+    // Get latest account settings, notably C/F display setting
+    await this.getAccountSettings();
+
     await this.loginSession()
       .then((res) => fetchStateForAllSystems(res))
       .then((systemStates) => {
@@ -1380,7 +1385,11 @@ class ADCPlatform implements DynamicPlatformPlugin {
     const uuid = uuidGen.generate(id);
     accessory = new platformAccessory(name, uuid);
 
-    const currentTemperature = convertFtoC(thermostat.attributes.ambientTemp);
+    // Homebridge is always in C, if Alarm.com is set to F, convert values to C
+    const shouldConvertToC = this.tempDisplayUnitSetting === hapCharacteristic.TemperatureDisplayUnits.FAHRENHEIT;
+    const currentTemperature = shouldConvertToC
+      ? convertFtoC(thermostat.attributes.ambientTemp)
+      : thermostat.attributes.ambientTemp;
 
     accessory.context = {
       accID: id,
@@ -1389,9 +1398,9 @@ class ADCPlatform implements DynamicPlatformPlugin {
       state: getThermostatState(thermostat.attributes.state),
       desiredState: getThermostatState(thermostat.attributes.state),
       currentTemperature: currentTemperature,
-      targetTemperature: getThermostatTargetTemperature(thermostat),
+      targetTemperature: getThermostatTargetTemperature(thermostat, shouldConvertToC),
       supportsHumidity: thermostat.attributes.supportsHumidity,
-      humidityLevel: thermostat.attributes.humidityLevel,
+      humidityLevel: thermostat.attributes.humidityLevel
     };
 
     // if the thermostat id is not in the ignore list in the homebridge config
@@ -1476,8 +1485,11 @@ class ADCPlatform implements DynamicPlatformPlugin {
   statThermostatState(accessory: PlatformAccessory<ThermostatContext>, thermostat: ThermostatState): void {
     const id = accessory.context.accID;
     const name = accessory.context.name;
-    const currentTemperature = convertFtoC(thermostat.attributes.ambientTemp);
-    const targetTemperature = getThermostatTargetTemperature(thermostat);
+    const shouldConvertToC = this.tempDisplayUnitSetting === hapCharacteristic.TemperatureDisplayUnits.FAHRENHEIT;
+    const currentTemperature = shouldConvertToC
+      ? convertFtoC(thermostat.attributes.ambientTemp)
+      : thermostat.attributes.ambientTemp;
+    const targetTemperature = getThermostatTargetTemperature(thermostat, shouldConvertToC);
     const currentState = getThermostatState(thermostat.attributes.state);
     const targetState = getThermostatState(thermostat.attributes.desiredState);
     const humidityLevel = thermostat.attributes.humidityLevel;
@@ -1616,8 +1628,13 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
     accessory.context.targetTemperature = value;
 
+    if (this.tempDisplayUnitSetting === hapCharacteristic.TemperatureDisplayUnits.FAHRENHEIT) {
+      // Homebridge is always in C, if Alarm.com is set to F, convert to F before sending
+      value = convertCtoF(value);
+    }
+
     await this.loginSession()
-      .then((res) => method(id, convertCtoF(value), res)) // Usually 20-30 seconds
+      .then((res) => method(id, value, res)) // Usually 20-30 seconds
       .then((res) => res.data)
       .then((thermostat) => {
         this.statThermostatState(accessory, thermostat);
@@ -1873,24 +1890,34 @@ function getThermostatState(state: number): CharacteristicValue {
   }
 }
 
-function getThermostatTargetTemperature(thermostat: ThermostatState): number {
+function getThermostatTargetTemperature(thermostat: ThermostatState, convertToC: boolean): number {
+  let value;
+
   switch (thermostat.attributes.desiredState) {
     case THERMOSTAT_STATES.HEATING:
-      return convertFtoC(thermostat.attributes.desiredHeatSetpoint);
+      value = thermostat.attributes.desiredHeatSetpoint;
+      break;
     case THERMOSTAT_STATES.COOLING:
-      return convertFtoC(thermostat.attributes.desiredCoolSetpoint);
+      value = thermostat.attributes.desiredCoolSetpoint;
+      break;
     case THERMOSTAT_STATES.AUTO:
     case THERMOSTAT_STATES.OFF:
     default:
       switch (thermostat.attributes.inferredState) {
         case THERMOSTAT_STATES.HEATING:
-          return convertFtoC(thermostat.attributes.desiredHeatSetpoint);
+          value = thermostat.attributes.desiredHeatSetpoint;
+          break;
         case THERMOSTAT_STATES.COOLING:
-          return convertFtoC(thermostat.attributes.desiredCoolSetpoint);
-        default:
-          return null;
+          value = thermostat.attributes.desiredCoolSetpoint;
+          break;
       }
   }
+
+  if (convertToC) {
+    value = convertFtoC(value);
+  }
+
+  return value;
 }
 
 function convertFtoC(f: number): number {
