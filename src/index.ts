@@ -50,7 +50,7 @@ import {
   setThermostatTargetCoolTemperature,
   setThermostatTargetHeatTemperature,
   ThermostatState
-} from "node-alarm-dot-com";
+} from 'node-alarm-dot-com';
 
 import { SimplifiedSystemState } from './_models/SimplifiedSystemState';
 import {
@@ -67,7 +67,7 @@ import {
   PartitionContext,
   SensorContext,
   ThermostatContext
-} from "./_models/Contexts";
+} from './_models/Contexts';
 import { CustomLogger, CustomLogLevel } from './CustomLogger';
 
 let hap: HAP;
