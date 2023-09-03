@@ -325,14 +325,14 @@ class ADCPlatform implements DynamicPlatformPlugin {
   async loginSession(): Promise<AuthOpts> {
     const now = +new Date();
     if (now > this.authOpts.expires) {
-      this.log.info(`Logging into Alarm.com as ${this.config.username}`);
+      this.log.debug(`Logging into Alarm.com as ${this.config.username}`);
       //const authOpts = await login(this.config.username, this.config.password, this.mfaToken);
       await login(this.config.username, this.config.password, this.useMFA ? this.mfaToken : null)
         .then((authOpts) => {
           // Cache login response and estimated expiration time
           authOpts.expires = +new Date() + 1000 * 60 * this.config.authTimeoutMinutes;
           this.authOpts = authOpts;
-          this.log.info(`Logged into Alarm.com as ${this.config.username}`);
+          this.log.debug(`Logged into Alarm.com as ${this.config.username}`);
         })
         .catch((err) => {
           this.log.error(`loginSession Error: ${err.message}`);
@@ -776,7 +776,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
     // Setup event listeners
     accessory.on(PlatformAccessoryEvent.IDENTIFY, () => {
-      this.log.info(`${name} identify requested`);
+      this.log.debug(`${name} identify requested`);
     });
 
     const service = accessory.getService(type);
@@ -889,7 +889,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
     // Setup event listeners
     accessory.on(PlatformAccessoryEvent.IDENTIFY, () => {
-      this.log.info(`${name} identify requested`);
+      this.log.debug(`${name} identify requested`);
     });
 
     const service = accessory.getService(type);
@@ -1102,7 +1102,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
 
     // Setup event listeners
     accessory.on(PlatformAccessoryEvent.IDENTIFY, () => {
-      this.log.info(`${name} identify requested`);
+      this.log.debug(`${name} identify requested`);
     });
 
     const service = accessory.getService(type);
@@ -1268,7 +1268,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
     // Setup event listeners
     // Todo: (paired, callback) causes troubles
     accessory.on('identify', () => {
-      this.log.info(`${name} identify requested`);
+      this.log.debug(`${name} identify requested`);
     });
 
     const service = accessory.getService(type);
