@@ -40,6 +40,7 @@ import {
   LockState,
   login,
   openGarage,
+  PartitionActionOptions,
   SensorState,
   SensorType,
   setLightOff,
@@ -70,6 +71,7 @@ import {
 } from './_models/Contexts';
 import { CustomLogger, CustomLogLevel } from './CustomLogger';
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 let hap: HAP;
 const PLUGIN_ID = 'homebridge-node-alarm-dot-com';
 const PLUGIN_NAME = 'Alarmdotcom';
@@ -105,7 +107,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
   private authOpts: AuthOpts;
   private config: PlatformConfig;
   private logLevel: CustomLogLevel;
-  private armingModes: any;
+  private armingModes: Record<string, Record<string, boolean>>;
   private ignoredDevices: string[];
   private useMFA: boolean;
   private mfaToken?: string;
@@ -213,7 +215,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
     this.listDevices()
       .then((res) => {
         this.log.debug('Registering system:');
-        this.log.debug(res as any);
+        this.log.debug(JSON.stringify(res));
 
         for (const device in res) {
           if (device === 'partitions' && typeof res[device][0] === 'undefined') {
@@ -656,7 +658,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
   ): Promise<void> {
     const id = accessory.context.accID;
     let method: typeof armAway | typeof armStay | typeof disarm;
-    const opts = {} as any;
+    const opts = {} as PartitionActionOptions;
 
     switch (value) {
       case hapCharacteristic.SecuritySystemTargetState.STAY_ARM:
@@ -1669,7 +1671,7 @@ class ADCPlatform implements DynamicPlatformPlugin {
     if (this.accessories.findIndex((accessory) => accessory.context.accID === id) > -1) {
       this.api.registerPlatformAccessories(PLUGIN_ID, PLUGIN_NAME, [accessory]);
     } else {
-      this.log.warn(`Preventing adding existing accessory ${name} with id ${id}`);
+      this.log.warn(`Preventing adding existing ${model} ${name} with id ${id}`);
     }
   }
 
@@ -1934,6 +1936,7 @@ function convertCtoF(c: number): number {
  * @param sensor  The type as defined by Alarm.com.
  * @returns {}  An array with details about its type as defines it.
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function getSensorType(sensor: SensorState): Array<any> {
   const state = sensor.attributes.state;
   const type = sensor.attributes.deviceType;
@@ -1977,6 +1980,7 @@ function getSensorType(sensor: SensorState): Array<any> {
  * @param model  The model as reported by Alarm.com.
  * @returns {array}  An array with homebridge service and characteristic types.
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function sensorModelToType(model: string): Array<any> {
   switch (model) {
     case 'Contact Sensor':

@@ -15,19 +15,19 @@ export class CustomLogger implements Logger {
     this.logLevel = logLevel;
   }
 
-  info(message: string, ...parameters: any[]): void {
+  info(message: string, ...parameters: unknown[]): void {
     if (this.logLevel >= CustomLogLevel.NOTICE) this.logger.info(message, ...parameters);
   }
 
-  warn(message: string, ...parameters: any[]): void {
+  warn(message: string, ...parameters: unknown[]): void {
     if (this.logLevel >= CustomLogLevel.WARN) this.logger.warn(message, ...parameters);
   }
 
-  error(message: string, ...parameters: any[]): void {
+  error(message: string, ...parameters: unknown[]): void {
     if (this.logLevel >= CustomLogLevel.ERROR) this.logger.error(message, ...parameters);
   }
 
-  debug(message: string, ...parameters: any[]): void {
+  debug(message: string, ...parameters: unknown[]): void {
     if (this.logLevel >= CustomLogLevel.VERBOSE) this.logger.debug(message, ...parameters);
   }
 
@@ -37,8 +37,23 @@ export class CustomLogger implements Logger {
    * @param message
    * @param parameters
    */
-  log(level: LogLevel, message: string, ...parameters: any[]): void {
-    return;
+  log(level: LogLevel, message: string, ...parameters: unknown[]): void {
+    switch (level) {
+      case LogLevel.DEBUG:
+        this.debug(message, parameters);
+        break;
+      case LogLevel.ERROR:
+        this.error(message, parameters);
+        break;
+      case LogLevel.INFO:
+        this.info(message, parameters);
+        break;
+      case LogLevel.WARN:
+        this.warn(message, parameters);
+        break;
+      default:
+        break;
+    }
   }
 }
 
