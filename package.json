@@ -52,7 +52,7 @@
     "homebridge": ">=1.4.0"
   },
   "dependencies": {
-    "node-alarm-dot-com": "2.1.0-beta.6",
+    "node-alarm-dot-com": "2.1.0",
     "polling-to-event": "^2.1.0"
   },
   "devDependencies": {
