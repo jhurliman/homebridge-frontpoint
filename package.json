@@ -1,6 +1,7 @@
 {
   "name": "homebridge-node-alarm-dot-com",
   "version": "1.10.0",
+  "betaVersion": "1.10.1",
   "description": "Alarm.com plugin for Homebridge using Node.js",
   "author": {
     "name": "Mike Kormendy",
