@@ -1783,7 +1783,15 @@ function getPartitionState(state: number): number {
  * @returns {*}  The state as defines it.
  */
 function getSensorState(sensor: SensorState): CharacteristicValue {
-  // console.log(`${sensor.attributes.description} Sensor (${sensor.id}) is ${sensor.attributes.stateText}.`)
+  // Some sensors remain "open" until they are disrupted and need special treatment.
+  if (sensor.attributes.deviceType == SensorType.Heat_Detector) {
+    if (sensor.attributes.state === 0) {
+      return hapCharacteristic.SmokeDetected.SMOKE_NOT_DETECTED;
+    } else {
+      return hapCharacteristic.SmokeDetected.SMOKE_DETECTED;
+    }
+  }
+
   switch (sensor.attributes.state) {
     case SENSOR_STATES.OPEN:
       return hapCharacteristic.ContactSensorState.CONTACT_NOT_DETECTED;
