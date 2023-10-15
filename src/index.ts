@@ -1785,11 +1785,15 @@ function getPartitionState(state: number): number {
 function getSensorState(sensor: SensorState): CharacteristicValue {
   // Some sensors remain "open" until they are disrupted and need special treatment.
   if (sensor.attributes.deviceType == SensorType.Heat_Detector) {
-    if (sensor.attributes.state === 0) {
-      return hapCharacteristic.SmokeDetected.SMOKE_NOT_DETECTED;
-    } else {
-      return hapCharacteristic.SmokeDetected.SMOKE_DETECTED;
-    }
+    return sensor.attributes.state === 0
+      ? hapCharacteristic.SmokeDetected.SMOKE_NOT_DETECTED
+      : hapCharacteristic.SmokeDetected.SMOKE_DETECTED;
+  }
+
+  if (sensor.attributes.deviceType == SensorType.Glass_Break) {
+    return sensor.attributes.state === 2
+      ? hapCharacteristic.ContactSensorState.CONTACT_DETECTED
+      : hapCharacteristic.ContactSensorState.CONTACT_NOT_DETECTED;
   }
 
   switch (sensor.attributes.state) {
