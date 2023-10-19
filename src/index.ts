@@ -376,13 +376,24 @@ class ADCPlatform implements DynamicPlatformPlugin {
    * This method makes a call to alarm.com in order to retrieve global account information.
    */
   async getAccountSettings() {
-    const authOpts = await this.loginSession();
-    const identities = await getIdentitiesState(authOpts.cookie, authOpts.ajaxKey);
-    const identity = identities.data[0];
-    if (identity) {
-      this.tempDisplayUnitSetting = identity.attributes.localizeTempUnitsToCelsius
-        ? hapCharacteristic.TemperatureDisplayUnits.CELSIUS
-        : hapCharacteristic.TemperatureDisplayUnits.FAHRENHEIT;
+    try {
+      const authOpts = await this.loginSession();
+      const identities = await getIdentitiesState(authOpts.cookie, authOpts.ajaxKey);
+      const identity = identities.data[0];
+      if (identity) {
+        this.tempDisplayUnitSetting = identity.attributes.localizeTempUnitsToCelsius
+          ? hapCharacteristic.TemperatureDisplayUnits.CELSIUS
+          : hapCharacteristic.TemperatureDisplayUnits.FAHRENHEIT;
+      }
+    } catch (e) {
+      this.log.error(
+        `There was an error retrieving account settings. Please check that your credentials are correct and restart the plugin.`
+      );
+      if (typeof e === typeof String) {
+        this.log.error(e);
+      } else if (e instanceof Error) {
+        this.log.error(e.message);
+      }
     }
   }
 
