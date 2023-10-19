@@ -59,3 +59,14 @@ typings/
 
 # Visual Studio cache/options directory
 .vs/
+
+# Jetbrains user settings
+.idea/
+
+# VSCode user settings
+.code-workspace
+*.code-workspace
+
+dist/
+P/
+.DS_Store

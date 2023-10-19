@@ -1,35 +1,71 @@
 {
-  "name": "homebridge-frontpoint",
-  "version": "1.0.4",
-  "description": "Homebridge plugin for FrontPoint alarm systems",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+  "name": "homebridge-node-alarm-dot-com",
+  "version": "1.10.0",
+  "betaVersion": "1.10.1",
+  "description": "Alarm.com plugin for Homebridge using Node.js",
+  "author": {
+    "name": "Mike Kormendy",
+    "email": "mike@somethinginteractive.com"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/jhurliman/homebridge-frontpoint.git"
-  },
-  "author": "John Hurliman <jhurliman@jhurliman.org>",
   "license": "MIT",
-  "bugs": {
-    "url": "https://github.com/jhurliman/homebridge-frontpoint/issues"
-  },
-  "homepage": "https://github.com/jhurliman/homebridge-frontpoint#readme",
   "keywords": [
-    "homebridge-plugin",
-    "frontpoint",
+    "node-only",
     "security",
     "alarm",
     "alarm.com",
+    "alarm-dot-com",
+    "alarmdotcom",
+    "homekit",
     "homebridge",
-    "homekit"
+    "homebridge-plugin"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/node-alarm-dot-com/homebridge-node-alarm-dot-com.git"
+  },
+  "homepage": "https://github.com/node-alarm-dot-com/homebridge-node-alarm-dot-com#readme",
+  "bugs": {
+    "url": "https://github.com/node-alarm-dot-com/homebridge-node-alarm-dot-com/issues"
+  },
+  "main": "dist/index.js",
+  "files": [
+    "LICENSE",
+    "README.md",
+    "dist/**/*",
+    "config.schema.json",
+    "package.json"
+  ],
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "clean": "rimraf ./dist",
+    "lint": "eslint src/**.ts",
+    "build": "rimraf ./dist && tsc",
+    "prepublishOnly": "npm run lint && npm run build",
+    "postpublish": "npm run clean",
+    "start": "ts-node src/index.ts",
+    "start-dev": "homebridge -I -D",
+    "watch": "npm run build && npm link && tsc && homebridge -I -D",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
   "engines": {
-    "node": ">=6.0.0",
-    "homebridge": ">=0.4.21"
+    "node": ">=16.0.0",
+    "homebridge": ">=1.4.0"
   },
   "dependencies": {
-    "frontpoint": "^1.2.0"
+    "node-alarm-dot-com": "2.1.0",
+    "polling-to-event": "^2.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.8.4",
+    "@typescript-eslint/eslint-plugin": "^6.7.5",
+    "@typescript-eslint/parser": "^6.7.5",
+    "eslint": "8.51.0",
+    "eslint-config-prettier": "^9.0.0",
+    "eslint-plugin-prettier": "^5.0.0",
+    "homebridge": "^1.6.1",
+    "homebridge-config-ui-x": "latest",
+    "rimraf": "^4.4.1",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.2.2"
   }
 }
