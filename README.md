@@ -62,7 +62,7 @@ npm test
 npm pack
 ```
 
-The seven tests cover real Homebridge service registration, filtering and cached accessories, unknown alarm states, login/refresh coalescing, removal, shutdown, and command failure reporting. They never connect to an alarm account or arm/disarm a panel. Actions runs Node 22/24/26.
+The eight tests cover real Homebridge service registration, filtering and cached accessories, unknown alarm states, login/refresh coalescing, removal, shutdown, and command failure reporting. They never connect to an alarm account or arm/disarm a panel. Actions runs Node 22/24/26.
 
 Before publishing 2.0:
 

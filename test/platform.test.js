@@ -85,3 +85,17 @@ test('commands await the cloud outcome and sanitize errors without optimistic al
 test('validates refresh and accessory filter settings', async t => {
   for (const config of [{ refreshSeconds: 0 }, { includeIDs: 'door' }, { armingModes: { unknown: {} } }]) await assert.rejects(setup(t, config));
 });
+
+test('unknown sensor state becomes unavailable while fresh battery state is retained', async t => {
+  const { instance, api } = await setup(t);
+  instance.addSensor(sensor);
+  const accessory = instance.accessories.door;
+  instance.setSensorState(accessory, { ...sensor, attributes: { ...sensor.attributes, state: 999, lowBattery: true } });
+  assert.equal(accessory.context.state, undefined);
+  assert.equal(accessory.context.batteryLow, true);
+  const service = accessory.getService(api.hap.Service.ContactSensor);
+  await assert.rejects(service.getCharacteristic(api.hap.Characteristic.ContactSensorState).handleGetRequest());
+  assert.equal(service.getCharacteristic(api.hap.Characteristic.StatusLowBattery).value, 1);
+  instance.setSensorState(accessory, sensor);
+  assert.equal(await service.getCharacteristic(api.hap.Characteristic.ContactSensorState).handleGetRequest(), 0);
+});

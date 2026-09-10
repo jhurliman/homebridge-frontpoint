@@ -375,19 +375,21 @@ class FrontPointPlatform {
     const batteryLow = Boolean(
       sensor.attributes.lowBattery || sensor.attributes.criticalBattery
     )
-    const [type, characteristic, model] = getSensorType(sensor)
+    const [reportedType] = getSensorType(sensor)
+    const [type, characteristic] = sensorModelToType(accessory.context.sensorType)
     if (!type || !accessory.getService(type)) return
+    const reportedState = reportedType === type ? state : undefined
 
-    if (state !== accessory.context.state) {
+    if (reportedState !== accessory.context.state) {
       this.log(
         `Updating sensor ${id}, state=${state}, prev=${accessory.context.state}`
       )
 
-      accessory.context.state = state
+      accessory.context.state = reportedState
       accessory
         .getService(type)
         .getCharacteristic(characteristic)
-        .updateValue(state === undefined ? new Error('State unavailable') : state)
+        .updateValue(reportedState === undefined ? new Error('State unavailable') : reportedState)
     }
 
     if (batteryLow !== accessory.context.batteryLow) {
