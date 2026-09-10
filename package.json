@@ -38,7 +38,8 @@
     "config.schema.json",
     "README.md",
     "CHANGELOG.md",
-    "LICENSE"
+    "LICENSE",
+    "RELEASING.md"
   ],
   "devDependencies": {
     "homebridge": "^2.4.0"
