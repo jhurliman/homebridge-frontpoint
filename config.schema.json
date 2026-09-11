@@ -1,0 +1,87 @@
+{
+  "pluginAlias": "FrontPoint",
+  "pluginType": "platform",
+  "singular": true,
+  "schema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "default": "Security System"
+      },
+      "username": {
+        "type": "string",
+        "required": true
+      },
+      "password": {
+        "type": "string",
+        "required": true,
+        "format": "password"
+      },
+      "refreshSeconds": {
+        "type": "number",
+        "minimum": 10,
+        "maximum": 86400,
+        "default": 60
+      },
+      "includeIDs": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Optional allowlist of partition and sensor IDs. Empty means none."
+      },
+      "excludeIDs": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Hide these IDs, even if included."
+      },
+      "armingModes": {
+        "type": "object",
+        "properties": {
+          "away": {
+            "type": "object",
+            "properties": {
+              "noEntryDelay": {
+                "type": "boolean",
+                "default": false
+              },
+              "silentArming": {
+                "type": "boolean",
+                "default": false
+              }
+            }
+          },
+          "night": {
+            "type": "object",
+            "properties": {
+              "noEntryDelay": {
+                "type": "boolean",
+                "default": false
+              },
+              "silentArming": {
+                "type": "boolean",
+                "default": true
+              }
+            }
+          },
+          "stay": {
+            "type": "object",
+            "properties": {
+              "noEntryDelay": {
+                "type": "boolean",
+                "default": false
+              },
+              "silentArming": {
+                "type": "boolean",
+                "default": true
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

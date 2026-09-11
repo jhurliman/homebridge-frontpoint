@@ -28,9 +28,16 @@ class FrontPointPlatform {
     if (!this.config.password)
       throw new Error('FrontPoint: Missing required password in config')
 
-    this.config.refreshSeconds = this.config.refreshSeconds || DEFAULT_REFRESH_S
+    this.config.refreshSeconds = this.config.refreshSeconds ?? DEFAULT_REFRESH_S
+    if (!Number.isFinite(this.config.refreshSeconds) || this.config.refreshSeconds < 10 || this.config.refreshSeconds > 86400)
+      throw new Error('refreshSeconds must be between 10 and 86400')
 
-    this.accessories = {}
+    this.accessories = Object.create(null)
+    this.stopped = false
+    this.loginPromise = null
+    this.refreshPromise = null
+    this.includeIDs = validateIDs(this.config.includeIDs, "includeIDs")
+    this.excludeIDs = validateIDs(this.config.excludeIDs, "excludeIDs")
     this.authOpts = { expires: +new Date() - 1 }
 
     // Default arming mode options
@@ -52,6 +59,7 @@ class FrontPointPlatform {
     // Overwrite default arming modes with config settings.
     if (this.config.armingModes !== undefined) {
       for(var key in this.config.armingModes) {
+        if (!Object.hasOwn(this.armingModes, key)) throw new Error('Unknown arming mode')
         this.armingModes[key].noEntryDelay = Boolean(this.config.armingModes[key].noEntryDelay);
         this.armingModes[key].silentArming = Boolean(this.config.armingModes[key].silentArming);
       }
@@ -60,39 +68,22 @@ class FrontPointPlatform {
     if (api) {
       this.api = api
       this.api.on('didFinishLaunching', this.didFinishLaunching.bind(this))
+      this.api.on('shutdown', () => { this.stopped = true; clearInterval(this.timerID) })
     }
   }
 
   // HomeBridge method overrides ///////////////////////////////////////////////
 
   didFinishLaunching() {
-    this.listDevices()
-      .then(res => {
-        this.log(
-          `Received ${res.partitions.length} partitions(s) and ${
-            res.sensors.length
-          } sensor(s) from FrontPoint`
-        )
+    if (this.timerID || this.stopped) return
+    void this.refreshDevices()
+    this.timerID = setInterval(() => { void this.refreshDevices() }, this.config.refreshSeconds * 1000)
+    this.timerID.unref?.()
+  }
 
-        res.partitions.forEach(p => {
-          this.addPartition(p)
-          this.log(`Added partition ${p.attributes.description} (${p.id})`)
-        })
-
-        res.sensors.forEach(s => {
-          this.addSensor(s)
-          this.log(`Added sensor ${s.attributes.description} (${s.id})`)
-        })
-      })
-      .catch(err => {
-        this.log(`UNHANDLED ERROR: ${err.stack}`)
-      })
-
-    // Start a timer to periodically refresh status
-    this.timerID = setInterval(
-      () => this.refreshDevices(),
-      this.config.refreshSeconds * 1000
-    )
+  isVisible(id) {
+    id = String(id)
+    return (!this.includeIDs || this.includeIDs.has(id)) && !this.excludeIDs?.has(id)
   }
 
   configureAccessory(accessory) {
@@ -102,6 +93,7 @@ class FrontPointPlatform {
       })`
     )
 
+    if (!this.isVisible(accessory.context.accID)) { this.removeAccessory(accessory); return }
     const existing = this.accessories[accessory.context.accID]
     if (existing) this.removeAccessory(existing)
 
@@ -123,17 +115,13 @@ class FrontPointPlatform {
     const now = +new Date()
     if (this.authOpts.expires > now) return Promise.resolve(this.authOpts)
 
-    this.log(`Logging into FrontPoint as ${this.config.username}`)
-    return frontpoint
-      .login(this.config.username, this.config.password)
+    if (this.loginPromise) return this.loginPromise
+    this.loginPromise = frontpoint.login(this.config.username, this.config.password)
       .then(authOpts => {
-        // Cache login response and estimated expiration time
-        authOpts.expires = +new Date() + AUTH_TIMEOUT_MS
-        this.authOpts = authOpts
-
-        this.log(`Logged into FrontPoint as ${this.config.username}`)
-        return authOpts
-      })
+        this.authOpts = { ...authOpts, expires: Date.now() + AUTH_TIMEOUT_MS }
+        return this.authOpts
+      }).finally(() => { this.loginPromise = null })
+    return this.loginPromise
   }
 
   listDevices() {
@@ -152,29 +140,39 @@ class FrontPointPlatform {
   }
 
   refreshDevices() {
-    this.login()
-      .then(res => fetchStateForAllSystems(res))
-      .then(systemStates => {
-        systemStates.forEach(system => {
-          system.partitions.forEach(partition => {
-            const accessory = this.accessories[partition.id]
-            if (!accessory) return this.addPartition(partition)
-
-            this.setPartitionState(accessory, partition)
-          })
-
-          system.sensors.forEach(sensor => {
-            const accessory = this.accessories[sensor.id]
-            if (!accessory) return this.addSensor(sensor)
-
-            this.setSensorState(accessory, sensor)
-          })
-        })
-      })
-      .catch(err => this.log(err))
+    if (this.stopped) return Promise.resolve()
+    if (this.refreshPromise) return this.refreshPromise
+    this.refreshPromise = this.listDevices().then(({ partitions, sensors }) => {
+      if (this.stopped) return
+      const found = new Set()
+      for (const [devices, add, update] of [
+        [partitions, 'addPartition', 'setPartitionState'],
+        [sensors, 'addSensor', 'setSensorState']
+      ]) {
+        for (const device of devices) {
+          if (!this.isVisible(device.id)) continue
+          found.add(String(device.id))
+          const accessory = this.accessories[device.id]
+          if (accessory) this[update](accessory, device)
+          else this[add](device)
+        }
+      }
+      for (const accessory of Object.values(this.accessories)) {
+        if (!found.has(String(accessory.context.accID))) this.removeAccessory(accessory)
+      }
+    }).catch(() => {
+      this.authOpts.expires = 0
+      this.log('FrontPoint refresh failed; check cloud connectivity and account access')
+      for (const accessory of Object.values(this.accessories)) {
+        const service = accessory.getService(Service.SecuritySystem)
+        if (service) { accessory.context.statusFault = true; service.updateCharacteristic(Characteristic.StatusFault, Characteristic.StatusFault.GENERAL_FAULT) }
+      }
+    }).finally(() => { this.refreshPromise = null })
+    return this.refreshPromise
   }
 
   addPartition(partition) {
+    if (!this.isVisible(partition.id) || this.stopped) return
     const id = partition.id
     let accessory = this.accessories[id]
     if (accessory) this.removeAccessory(accessory)
@@ -227,11 +225,11 @@ class FrontPointPlatform {
 
     service
       .getCharacteristic(Characteristic.SecuritySystemCurrentState)
-      .on('get', callback => callback(null, accessory.context.state))
+      .on('get', callback => accessory.context.state == null ? callback(new Error('State unavailable')) : callback(null, accessory.context.state))
 
     service
       .getCharacteristic(Characteristic.SecuritySystemTargetState)
-      .on('get', callback => callback(null, accessory.context.desiredState))
+      .on('get', callback => accessory.context.desiredState == null ? callback(new Error('State unavailable')) : callback(null, accessory.context.desiredState))
       .on('set', (value, callback) =>
         this.changePartitionState(accessory, value, callback)
       )
@@ -242,6 +240,7 @@ class FrontPointPlatform {
   }
 
   addSensor(sensor) {
+    if (!this.isVisible(sensor.id) || this.stopped) return
     const id = sensor.id
     let accessory = this.accessories[id]
     if (accessory) this.removeAccessory(accessory)
@@ -302,7 +301,7 @@ class FrontPointPlatform {
 
     service
       .getCharacteristic(characteristic)
-      .on('get', callback => callback(null, accessory.context.state))
+      .on('get', callback => accessory.context.state == null ? callback(new Error('State unavailable')) : callback(null, accessory.context.state))
 
     service
       .getCharacteristic(Characteristic.StatusLowBattery)
@@ -325,7 +324,7 @@ class FrontPointPlatform {
     const id = accessory.context.accID
     const state = getPartitionState(partition.attributes.state)
     const desiredState = getPartitionState(partition.attributes.desiredState)
-    const statusFault = Boolean(partition.attributes.needsClearIssuesPrompt)
+    const statusFault = state === undefined || desiredState === undefined || Boolean(partition.attributes.needsClearIssuesPrompt)
 
     if (state !== accessory.context.state) {
       this.log(
@@ -338,7 +337,7 @@ class FrontPointPlatform {
       accessory
         .getService(Service.SecuritySystem)
         .getCharacteristic(Characteristic.SecuritySystemCurrentState)
-        .updateValue(state)
+        .updateValue(state === undefined ? new Error('State unavailable') : state)
     }
 
     if (desiredState !== accessory.context.desiredState) {
@@ -352,7 +351,7 @@ class FrontPointPlatform {
       accessory
         .getService(Service.SecuritySystem)
         .getCharacteristic(Characteristic.SecuritySystemTargetState)
-        .updateValue(desiredState)
+        .updateValue(desiredState === undefined ? new Error('State unavailable') : desiredState)
     }
 
     if (statusFault !== accessory.context.statusFault) {
@@ -376,18 +375,21 @@ class FrontPointPlatform {
     const batteryLow = Boolean(
       sensor.attributes.lowBattery || sensor.attributes.criticalBattery
     )
-    const [type, characteristic, model] = getSensorType(sensor)
+    const [reportedType] = getSensorType(sensor)
+    const [type, characteristic] = sensorModelToType(accessory.context.sensorType)
+    if (!type || !accessory.getService(type)) return
+    const reportedState = reportedType === type ? state : undefined
 
-    if (state !== accessory.context.state) {
+    if (reportedState !== accessory.context.state) {
       this.log(
         `Updating sensor ${id}, state=${state}, prev=${accessory.context.state}`
       )
 
-      accessory.context.state = state
+      accessory.context.state = reportedState
       accessory
         .getService(type)
         .getCharacteristic(characteristic)
-        .updateValue(state)
+        .updateValue(reportedState === undefined ? new Error('State unavailable') : reportedState)
     }
 
     if (batteryLow !== accessory.context.batteryLow) {
@@ -415,10 +417,11 @@ class FrontPointPlatform {
   }
 
   removeAccessories() {
-    this.accessories.forEach(id => this.removeAccessory(this.accessories[id]))
+    Object.values(this.accessories).forEach(accessory => this.removeAccessory(accessory))
   }
 
   changePartitionState(accessory, value, callback) {
+    if (this.stopped) return callback(new Error('Plugin is shutting down'))
     const id = accessory.context.accID
     let method
     const opts = {}
@@ -449,7 +452,6 @@ class FrontPointPlatform {
     }
 
     this.log(`changePartitionState(${accessory.context.accID}, ${value})`)
-    accessory.context.desiredState = value
 
     this.login()
       .then(res => method(id, res, opts)) // Usually 20-30 seconds
@@ -457,9 +459,9 @@ class FrontPointPlatform {
       .then(partition => this.setPartitionState(accessory, partition))
       .then(_ => callback())
       .catch(err => {
-        this.log(`Error: Failed to change partition state: ${err.stack}`)
+        this.log('FrontPoint command failed; refreshing state')
         this.refreshDevices()
-        callback(err)
+        callback(new Error("FrontPoint command failed"))
       })
   }
 }
@@ -476,10 +478,10 @@ function getPartitionState(state) {
       return Characteristic.SecuritySystemCurrentState.AWAY_ARM
     case frontpoint.SYSTEM_STATES.ARMED_NIGHT:
       return Characteristic.SecuritySystemCurrentState.NIGHT_ARM
-    case frontpoint.SYSTEM_STATES.UNKNOWN:
     case frontpoint.SYSTEM_STATES.DISARMED:
-    default:
       return Characteristic.SecuritySystemCurrentState.DISARMED
+    default:
+      return undefined
   }
 }
 
@@ -539,4 +541,10 @@ function sensorModelToType(model) {
     default:
       return [undefined, undefined]
   }
+}
+
+function validateIDs(ids, name) {
+  if (ids === undefined) return null
+  if (!Array.isArray(ids) || ids.some(id => typeof id !== 'string' || !id.length)) throw new Error(`${name} must be an array of IDs`)
+  return new Set(ids)
 }

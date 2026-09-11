@@ -1,10 +1,11 @@
 {
   "name": "homebridge-frontpoint",
-  "version": "1.0.4",
+  "version": "2.0.0",
   "description": "Homebridge plugin for FrontPoint alarm systems",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test",
+    "prepack": "npm test"
   },
   "repository": {
     "type": "git",
@@ -26,10 +27,21 @@
     "homekit"
   ],
   "engines": {
-    "node": ">=6.0.0",
-    "homebridge": ">=0.4.21"
+    "node": "^22 || ^24 || ^26",
+    "homebridge": "^2.4.0"
   },
   "dependencies": {
-    "frontpoint": "^1.2.0"
+    "frontpoint": "^1.2.0 || ^2.0.0"
+  },
+  "files": [
+    "index.js",
+    "config.schema.json",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "RELEASING.md"
+  ],
+  "devDependencies": {
+    "homebridge": "^2.4.0"
   }
 }
