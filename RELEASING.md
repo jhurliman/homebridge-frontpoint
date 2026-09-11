@@ -1,9 +1,11 @@
 # Releasing homebridge-frontpoint
 
-1. Validate and publish the [Frontpoint 2.0 client](https://github.com/jhurliman/node-frontpoint/pull/4). The client’s login HTTP 403 report remains unresolved until verified on an authorized account.
-2. Set the plugin dependency to `frontpoint: ^2.0.0` and regenerate the lockfile. The temporary compatibility range allows 1.2 and 2.0; the currently locked 1.2 version retains an obsolete `node-fetch` advisory and must not be used for the new release.
-3. Repeat `npm ci`, `npm test`, and `npm pack` with the published client.
-4. Verify read-only login and state retrieval. Command validation must be deliberate and supervised.
-5. Confirm Homebridge/Node compatibility and package contents, then publish with migration notes.
+The maintainer no longer has the required account or hardware. Releases may proceed after automated checks, with the README and release notes explicitly stating that live compatibility is unverified. Do not describe simulated tests as hardware or service validation. Invite active users to test and take over maintenance.
 
-Do not publish until the dependency and live-service requirements are satisfied.
+- Publish `frontpoint` first, require `^2.0.0`, and regenerate the lockfile.
+- Run `npm ci`, `npm test`, and `npm pack` against the published dependencies. Confirm supported Node/Homebridge versions, entry points, UI schema, documentation, and license.
+- Review migration notes and publish. Keep known compatibility issues open until an active user verifies a fix.
+
+## Community validation
+
+Verify read-only login and sensor/partition retrieval first. The client’s HTTP 403 report remains unresolved; any command checks must target a deliberately selected partition.

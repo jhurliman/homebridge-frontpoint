@@ -9,6 +9,12 @@ Bring Frontpoint security partitions and contact, occupancy, and water-leak sens
 
 Requires Homebridge 2.4+ and Node 22, 24, or 26. See [CHANGELOG.md](CHANGELOG.md) for migration notes.
 
+## Maintainer wanted
+
+The current maintainer no longer has an active Frontpoint account and cannot test this integration against a live setup. Automated tests pass, but this release has not been validated against the current Frontpoint service. Compatibility reports and fixes from active users are welcome.
+
+If you use this integration and would like to take over maintenance and releases, [open an issue](https://github.com/jhurliman/homebridge-frontpoint/issues/new?title=Interested%20in%20maintaining%20this%20project) describing your setup and interest.
+
 ## Configuration
 
 Install the plugin through Homebridge UI, then add one `FrontPoint` platform. The UI includes a configuration form. The equivalent entry in `config.json`'s `platforms` array is:
@@ -64,7 +70,7 @@ npm pack
 
 The eight tests cover real Homebridge service registration, filtering and cached accessories, unknown alarm states, login/refresh coalescing, removal, shutdown, and command failure reporting. They never connect to an alarm account or arm/disarm a panel. Actions runs Node 22/24/26.
 
-Maintainer release checks and client dependency updates are tracked in [RELEASING.md](RELEASING.md). The currently locked Frontpoint 1.2 client uses an obsolete `node-fetch` dependency with a known advisory; the dependency upgrade and live-account validation remain outstanding.
+Maintainer release checks and client dependency updates are tracked in [RELEASING.md](RELEASING.md). Version 2 uses the Frontpoint 2 client with native fetch. Live-account compatibility remains unverified.
 
 Existing partition/sensor UUIDs are preserved. Back up Homebridge before upgrading; the new filtering and stale-accessory reconciliation intentionally remove accessories that are no longer selected or present in a successful cloud listing.
 
